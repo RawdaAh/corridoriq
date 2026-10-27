@@ -1,0 +1,789 @@
+<title>CorridorIQ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* CorridorIQ - wind-aware drone corridor planning. Layout: full-bleed 3D city; left = the task
+   (plan / capacity / dispatch / validation) as a short form; right = the answer as cards and charts. */
+:root {
+  --sky: #dfe9f2; --fog: #e6edf3; --ground: #eceae4;
+  --panel: #ffffffee; --card: #ffffff; --ink: #121a24; --ink-2: #4a5663; --ink-3: #7d8894; --rule: #e1e5ea;
+  --brand: #1747c9; --brand-soft: #1747c914; --corridor: #b5267f;
+  --aware: #1a7bdc; --naive: #e8811a; --good: #1e8a4c; --bad: #d13b3b; --warn: #b7791f;
+  --op1: #1a7bdc; --op2: #e8681a; --op3: #1baf7a; --op4: #c98500; --op5: #d55181; --op6: #6250d6; --op7: #2c9a2c; --op8: #e34948; --op9: #3f8fa8; --op10: #8a6d3b;
+  --w-lo: #9fd6a0; --w-mid: #2c9ea1; --w-hi: #2f3fb0;
+  --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --sky: #0d1622; --fog: #101a26; --ground: #1a2028; --panel: #141c26ee; --card: #18212c; --ink: #e8eef4; --ink-2: #a9b6c2; --ink-3: #74818d; --rule: #26313d;
+  --brand: #6f97ff; --brand-soft: #6f97ff1f; --corridor: #e05aa9; --aware: #49a0f5; --naive: #f0a040; --good: #44b874; --bad: #ef6a6a; --warn: #d9a441;
+  --w-lo: #4f7d45; --w-mid: #2f8f8a; --w-hi: #8d9cf5; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --sky: #0d1622; --fog: #101a26; --ground: #1a2028; --panel: #141c26ee; --card: #18212c; --ink: #e8eef4; --ink-2: #a9b6c2; --ink-3: #74818d; --rule: #26313d;
+  --brand: #6f97ff; --brand-soft: #6f97ff1f; --corridor: #e05aa9; --aware: #49a0f5; --naive: #f0a040; --good: #44b874; --bad: #ef6a6a; --warn: #d9a441;
+  --w-lo: #4f7d45; --w-mid: #2f8f8a; --w-hi: #8d9cf5; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--sky); color: var(--ink); font: 13.5px/1.4 var(--font-body); overflow: hidden; }
+#stage { position: fixed; inset: 0; }
+header.top { position: fixed; z-index: 6; top: max(10px, env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px));
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+header.top > * { pointer-events: auto; }
+.logo { display: flex; align-items: center; gap: 9px; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 7px 14px 7px 9px; box-shadow: 0 4px 20px #0000000d; }
+.logo svg { width: 30px; height: 30px; }
+.logo b { font: 800 19px/1 var(--font-display); letter-spacing: -.01em; }
+.logo span { display: block; font-size: 11px; color: var(--ink-3); }
+nav.screens { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 4px; box-shadow: 0 4px 20px #0000000d; }
+nav.screens button { border: 0; background: transparent; color: var(--ink-2); font: 600 13.5px var(--font-display); padding: 8px 13px; border-radius: 10px; cursor: pointer; }
+nav.screens button[aria-selected="true"] { background: var(--brand); color: #fff; }
+.areabox { margin-left: auto; display: flex; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 6px 8px 6px 12px; box-shadow: 0 4px 20px #0000000d; }
+.areabox b { font: 700 13px var(--font-display); }
+.areabox small { color: var(--ink-3); font-size: 11px; }
+aside.side { position: fixed; z-index: 5; top: 78px; bottom: max(10px, env(safe-area-inset-bottom, 0px)); background: var(--panel); border: 1px solid var(--rule); border-radius: 16px;
+  box-shadow: 0 6px 30px #00000012; overflow-y: auto; overscroll-behavior: contain; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+#left { left: max(10px, env(safe-area-inset-left, 0px)); width: min(350px, calc(100vw - 20px)); }
+#right { right: max(10px, env(safe-area-inset-right, 0px)); width: min(400px, calc(100vw - 20px)); bottom: auto; max-height: calc(100% - 88px); }
+#right:empty { display: none; }
+.blk { padding: 14px 16px; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.blk:last-child { border-bottom: 0; }
+.blk h2 { margin: 0; font: 700 15px var(--font-display); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.blk h2 small { font: 500 11.5px var(--font-body); color: var(--ink-3); }
+.step { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font: 700 11px var(--font-display); margin-right: 6px; }
+.field { display: grid; gap: 4px; }
+.field > span { font-size: 11.5px; color: var(--ink-3); font-weight: 500; }
+.inrow { display: flex; gap: 6px; align-items: center; }
+input[type="text"], input[type="number"], select { font: 13.5px var(--font-body); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; width: 100%; min-width: 0; }
+input[type="range"] { width: 100%; accent-color: var(--brand); }
+.btn { border: 1px solid var(--rule); background: var(--card); color: var(--ink); font: 600 12.5px var(--font-body); padding: 8px 11px; border-radius: 10px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.go { background: var(--brand); border-color: var(--brand); color: #fff; font: 700 14.5px var(--font-display); padding: 11px 14px; width: 100%; }
+.btn.icon { padding: 8px 9px; }
+.btn[aria-pressed="true"] { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.seg { display: flex; background: var(--rule); border-radius: 10px; padding: 3px; gap: 3px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font: 600 12.5px var(--font-body); padding: 7px 4px; border-radius: 8px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px #0002; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--card); border-radius: 999px; padding: 5px 6px 5px 10px; font-size: 12px; max-width: 100%; }
+.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip button { border: 0; background: transparent; color: var(--ink-3); cursor: pointer; font-size: 13px; padding: 0 4px; }
+.chip.on { border-color: var(--brand); }
+.hours { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 3px; }
+.hour { flex: none; border: 1px solid var(--rule); background: var(--card); border-radius: 10px; padding: 6px 7px; text-align: center; cursor: pointer; font-size: 11px; color: var(--ink-2); min-width: 54px; }
+.hour b { display: block; font: 600 12.5px var(--font-mono); color: var(--ink); }
+.hour svg { width: 16px; height: 16px; display: block; margin: 2px auto; }
+.hour[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); }
+.hour.best { box-shadow: inset 0 -3px 0 var(--good); }
+.wx { display: grid; gap: 5px; }
+.wxrow { display: grid; grid-template-columns: 58px 22px minmax(0, 1fr) 82px; gap: 8px; align-items: center; font-size: 12.5px; }
+.wxrow .bar { height: 7px; border-radius: 4px; background: var(--rule); overflow: hidden; }
+.wxrow .bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--w-lo), var(--w-mid), var(--w-hi)); }
+.wxrow svg { width: 18px; height: 18px; }
+.wxrow .v { font-family: var(--font-mono); font-size: 12px; text-align: right; }
+.note { font-size: 11.5px; color: var(--ink-3); margin: 0; line-height: 1.45; }
+.answer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.metric { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.metric .k { font-size: 11px; color: var(--ink-3); font-weight: 500; }
+.metric .v { font: 800 22px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+.metric .v small { font: 600 12px var(--font-body); color: var(--ink-2); }
+.metric .d { font-size: 11.5px; color: var(--ink-2); }
+.metric.hero { grid-column: 1 / -1; background: var(--brand-soft); border-color: transparent; }
+.metric.hero .v { font-size: 30px; color: var(--brand); }
+.up { color: var(--bad); } .down { color: var(--good); }
+.verdict { padding: 9px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; background: var(--brand-soft); }
+.verdict.good { background: color-mix(in srgb, var(--good) 14%, transparent); }
+.verdict.bad { background: color-mix(in srgb, var(--bad) 13%, transparent); }
+.tabs { display: flex; gap: 3px; background: var(--rule); border-radius: 9px; padding: 3px; }
+.tabs button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font: 600 11.5px var(--font-body); padding: 5px 2px; border-radius: 7px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--card); color: var(--ink); }
+canvas.chart { width: 100%; height: 150px; display: block; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 5px 5px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font-size: 10.5px; color: var(--ink-3); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+td:first-child, th:first-child { text-align: left; }
+td.m { font-family: var(--font-mono); font-size: 11.5px; }
+tr.sel td { background: var(--brand-soft); }
+tr.click { cursor: pointer; }
+td.ok { color: var(--good); } td.off { color: var(--warn); }
+.tw { overflow-x: auto; }
+.prog { height: 5px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+.prog i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .2s; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+details { border-top: 1px dashed var(--rule); padding-top: 8px; }
+details summary { cursor: pointer; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+details .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.pin { position: fixed; z-index: 3; transform: translate(-50%, -100%); pointer-events: none; text-align: center; }
+.pin .b { background: var(--card); border: 2px solid var(--ink); color: var(--ink); border-radius: 999px; padding: 3px 11px; font: 700 13px var(--font-display); white-space: nowrap; box-shadow: 0 3px 12px #0002; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.pin .b small { font: 500 11px var(--font-body); color: var(--ink-3); margin-left: 4px; }
+.pin .s { width: 2px; height: 30px; background: var(--ink); margin: 0 auto; }
+.pin.to .b { background: var(--ink); color: var(--card); } .pin.to .b small { color: var(--card); opacity: .75; }
+.mapbar { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 6px; box-shadow: 0 4px 20px #0000000f; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 800px); }
+.mapbar .lg { font-size: 11.5px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; padding: 0 6px; flex-wrap: wrap; }
+.mapbar a { color: var(--ink-3); font-size: 11px; }
+.ramp { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--w-lo), var(--w-mid), var(--w-hi)); vertical-align: 1px; }
+.toast { position: fixed; z-index: 8; top: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--card); padding: 9px 14px; border-radius: 10px; font-size: 12.5px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 80vw; }
+.toast.on { opacity: 1; }
+.picking { cursor: crosshair !important; }
+button:focus-visible, select:focus-visible, input:focus-visible, .hour:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.fallback { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--ink-2); }
+@media (max-width: 1150px) { #right { top: auto; bottom: max(10px, env(safe-area-inset-bottom, 0px)); max-height: 45%; } .mapbar { display: none; } }
+@media (max-width: 760px) { #left { top: auto; height: 48%; } #right { top: 150px; bottom: auto; max-height: calc(52% - 165px); } .areabox { margin-left: 0; } .pin { display: none !important; } }
+</style>
+
+<div id="stage"></div>
+<div class="pin" id="pinA"><div class="b" id="pinAt">From</div><div class="s"></div></div>
+<div class="pin to" id="pinB"><div class="b" id="pinBt">To</div><div class="s"></div></div>
+
+<header class="top">
+  <div class="logo"><svg viewBox="0 0 32 32" fill="none"><rect x="1" y="1" width="30" height="30" rx="9" fill="var(--brand)"/><path d="M6 21c5-1 8-6 13-7s6 1 7 1" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M6 15c4-1 6-4 10-5" stroke="#fff" stroke-opacity=".55" stroke-width="2" stroke-linecap="round"/><circle cx="25.5" cy="15" r="2.6" fill="#fff"/></svg>
+    <div><b>CorridorIQ</b><span>Wind-aware drone corridors</span></div></div>
+  <nav class="screens" role="tablist" id="screens">
+    <button role="tab" type="button" data-s="plan" aria-selected="true">Plan flights</button>
+    <button role="tab" type="button" data-s="cap" aria-selected="false">Corridor capacity</button>
+    <button role="tab" type="button" data-s="disp" aria-selected="false">Dispatch</button>
+    <button role="tab" type="button" data-s="val" aria-selected="false">Validation</button>
+  </nav>
+  <div class="areabox"><div><b id="areaname"></b><br><small id="areainfo"></small></div>
+    <label class="btn" for="osmfile">Change area<input type="file" id="osmfile" accept=".osm,.xml" hidden></label></div>
+</header>
+
+<aside class="side" id="left" aria-label="Task"></aside>
+<aside class="side" id="right" aria-label="Results"></aside>
+<div class="mapbar"><button class="btn" type="button" id="m-net" aria-pressed="false">Flight network</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
+  <span class="lg"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span><span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span><span>wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
+<div class="toast" id="toast"></div>
+
+<script>/*__ENGINE__*/</script>
+<script>const DATA=/*__DATA__*/null; const ENGINE_SRC=/*__ENGINE_SRC__*/"";</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const G = window.LabEngine, FT = G.FT, MPH = 2.236936;
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const fmt = (x, d = 1) => (x == null || !isFinite(x)) ? "–" : Number(x).toFixed(d);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 3400); };
+const OPS = ["--op1", "--op2", "--op3", "--op4", "--op5", "--op6", "--op7", "--op8", "--op9", "--op10"];
+const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+const compass = (d) => COMPASS[Math.round(((d % 360) + 360) % 360 / 22.5) % 16];
+if (!window.THREE || !DATA) { document.body.insertAdjacentHTML("beforeend", '<div class="fallback">CorridorIQ needs three.js from cdnjs and jsDelivr. Check the connection and reload.</div>'); return; }
+
+// ===================================================================== state
+const S = {
+  screen: "plan", city: DATA.city, wx: DATA.weather, hour: 0,
+  from: null, to: null, routes: [], active: -1, priority: "balanced",
+  design: { mlen: 500, mwid: 160, nlat: 4, ceil: 400, nh: 4, clearance: 25 },
+  veh: { cruise_mph: 35, energy_j_per_ft: 20.42, phase_dependent: true, k_climb: 0.2, alpha_desc: 1, takeoff_fraction: 0.1, battery_wh: 250 },
+  cap: { size: "standard", D: 400, ops: 3, twoWay: true, separate: false, slot: 30, windLinks: true },
+  disp: { c: 0, m: 1 }, plan: null, anim: { t: 0, tmax: 1, rate: 1, playing: false }, follow: false, net: false,
+};
+const SIZES = { compact: { label: "Compact", lanes: 2, layers: 2 }, standard: { label: "Standard", lanes: 4, layers: 3 }, wide: { label: "Wide", lanes: 6, layers: 4 } };
+
+// ===================================================================== realistic 3D city
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$("stage").appendChild(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(42, 1, 3, 40000);
+const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.485; controls.minDistance = 40;
+const hemi = new THREE.HemisphereLight(0xf4f8ff, 0x8a8577, 0.62); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff5e6, 0.95); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6; scene.add(sun); scene.add(sun.target);
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); camera.aspect = w / h; if (w > 1150) camera.setViewOffset(w, h, -15, 0, w, h); else camera.clearViewOffset(); camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+const V = (e, n, z) => new THREE.Vector3(e, z, -n);
+const col = (n) => new THREE.Color(css(n));
+const dark = () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
+const groups = {};
+function group(name) { const o = groups[name]; if (o) { scene.remove(o); o.traverse((x) => { x.geometry && x.geometry.dispose(); if (x.material) [].concat(x.material).forEach((m) => { m.map && m.map.dispose(); m.dispose(); }); }); } const g = new THREE.Group(); groups[name] = g; scene.add(g); return g; }
+
+function windowTexture(night) {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d");
+  x.fillStyle = night ? "#2a2f36" : "#ffffff"; x.fillRect(0, 0, 64, 64);
+  for (const [a, b] of [[6, 10], [36, 10]]) { x.fillStyle = night ? (Math.random() < 0.45 ? "#ffd27a" : "#3b4450") : "#7f93a8"; x.fillRect(a, b, 22, 30);
+    if (!night) { const g = x.createLinearGradient(a, b, a + 22, b + 30); g.addColorStop(0, "rgba(255,255,255,.45)"); g.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = g; x.fillRect(a, b, 22, 30); } }
+  x.fillStyle = night ? "#20252b" : "#e9e6df"; x.fillRect(0, 50, 64, 3);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 7.5, 1 / 3.6); t.anisotropy = 4; return t;
+}
+const KIND_COL = { office: "#c9d2dc", commercial: "#d6d2c9", retail: "#ddd5c8", apartments: "#e3d6c3", residential: "#e6d9c6", house: "#efe4d2", hotel: "#d8d0c2",
+  parking: "#bfbdb7", garage: "#c4c1ba", industrial: "#cbc5ba", warehouse: "#ccc6bb", church: "#e2cfae", civic: "#e1d3b8", government: "#e1d3b8", public: "#e1d3b8",
+  school: "#dcc9ae", university: "#dcc9ae", hospital: "#e9e6e1", train_station: "#d9c7aa", stadium: "#d8d8d4", yes: "#dbd8d1" };
+function bcolor(b) { let c = KIND_COL[b.k] || KIND_COL.yes; if (b.h > 70 && (b.k === "yes" || b.k === "office" || b.k === "commercial")) c = "#a9bccd"; const C = new THREE.Color(c);
+  const j = 0.94 + ((Math.sin(b.p[0] * 12.9898 + b.p[1] * 78.233) * 43758.5453) % 1 + 1) % 1 * 0.1; C.multiplyScalar(j); if (dark()) C.multiplyScalar(0.5); return C; }
+function drawCity() {
+  const skyC = col("--sky"); scene.background = skyC; scene.fog = new THREE.Fog(col("--fog"), 2600, 11000);
+  const g = group("city"), night = dark();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), new THREE.MeshLambertMaterial({ color: col("--ground") })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; g.add(ground);
+  // land use
+  const AC = night ? { water: "#1d3b55", park: "#26402a", grass: "#2b4430", plaza: "#2a2f35", parking: "#24282d", rail: "#2e2a26" } : { water: "#9cc7e8", park: "#b7d7a0", grass: "#c7e1b1", plaza: "#f1efe9", parking: "#d9d8d3", rail: "#d8d0c3" };
+  const order = ["parking", "rail", "plaza", "grass", "park", "water"];
+  for (const kind of order) { const geos = [];
+    for (const a of S.city.areas) { if (a.k !== kind || a.p.length < 6) continue; const sh = new THREE.Shape(); sh.moveTo(a.p[0], a.p[1]); for (let i = 2; i < a.p.length; i += 2) sh.lineTo(a.p[i], a.p[i + 1]); geos.push(new THREE.ShapeGeometry(sh)); }
+    if (!geos.length) continue; const m = mergeAll(geos); m.rotateX(-Math.PI / 2); const mesh = new THREE.Mesh(m, new THREE.MeshLambertMaterial({ color: new THREE.Color(AC[kind]), polygonOffset: true, polygonOffsetFactor: -1 - order.indexOf(kind), polygonOffsetUnits: -1 }));
+    mesh.position.y = 0.05 + 0.02 * order.indexOf(kind); mesh.receiveShadow = true; g.add(mesh); }
+  // roads as ribbons
+  const rp = [], rc = [], asphalt = new THREE.Color(night ? "#30353c" : "#a4a9ae"), major = new THREE.Color(night ? "#3a4048" : "#959ba1"), walk = new THREE.Color(night ? "#2a2e33" : "#c9c9c3");
+  for (const r of S.city.roads) { const p = r.p, w = r.w / 2, c = r.w <= 3 ? walk : r.M ? major : asphalt;
+    for (let k = 0; k + 3 < p.length; k += 2) { const x0 = p[k], y0 = p[k + 1], x1 = p[k + 2], y1 = p[k + 3], dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L * w, ny = dx / L * w;
+      const q = [[x0 + nx, y0 + ny], [x0 - nx, y0 - ny], [x1 - nx, y1 - ny], [x1 + nx, y1 + ny]];
+      for (const i of [0, 1, 2, 0, 2, 3]) { rp.push(q[i][0], 0.25, -q[i][1]); rc.push(c.r, c.g, c.b); } } }
+  const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.Float32BufferAttribute(rp, 3)); rg.setAttribute("color", new THREE.Float32BufferAttribute(rc, 3)); rg.computeVertexNormals();
+  const roads = new THREE.Mesh(rg, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 })); roads.receiveShadow = true; g.add(roads);
+  // buildings: walls with windows, roofs
+  const W = { p: [], n: [], u: [], c: [] }, R = { p: [], n: [], c: [] };
+  for (const b of S.city.buildings) {
+    const p = b.p; if (p.length < 6) continue; const sh = new THREE.Shape(); sh.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) sh.lineTo(p[i], p[i + 1]);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: Math.max(2, b.h), bevelEnabled: false }), pos = geo.attributes.position.array, nor = geo.attributes.normal.array, uv = geo.attributes.uv.array, C = bcolor(b), Cr = C.clone().lerp(new THREE.Color(night ? "#1e2329" : "#f4f3ef"), 0.35);
+    for (const gr of geo.groups) for (let i = gr.start; i < gr.start + gr.count; i++) {
+      const x = pos[3 * i], y = pos[3 * i + 1], z = pos[3 * i + 2];
+      if (gr.materialIndex === 0) { if (z < 0.5) continue; R.p.push(x, z, -y); R.n.push(nor[3 * i], nor[3 * i + 2], -nor[3 * i + 1]); R.c.push(Cr.r, Cr.g, Cr.b); }
+      else { W.p.push(x, z, -y); W.n.push(nor[3 * i], nor[3 * i + 2], -nor[3 * i + 1]); W.u.push(uv[2 * i], uv[2 * i + 1]); W.c.push(C.r, C.g, C.b); } }
+    geo.dispose();
+  }
+  const wg = new THREE.BufferGeometry(); wg.setAttribute("position", new THREE.Float32BufferAttribute(W.p, 3)); wg.setAttribute("normal", new THREE.Float32BufferAttribute(W.n, 3)); wg.setAttribute("uv", new THREE.Float32BufferAttribute(W.u, 2)); wg.setAttribute("color", new THREE.Float32BufferAttribute(W.c, 3));
+  const tex = windowTexture(night), wm = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
+  if (night) { wm.emissive = new THREE.Color("#ffcf7a"); wm.emissiveMap = windowTexture(true); wm.emissiveIntensity = 0.55; }
+  const walls = new THREE.Mesh(wg, wm); walls.castShadow = true; walls.receiveShadow = true; g.add(walls);
+  const rgm = new THREE.BufferGeometry(); rgm.setAttribute("position", new THREE.Float32BufferAttribute(R.p, 3)); rgm.setAttribute("normal", new THREE.Float32BufferAttribute(R.n, 3)); rgm.setAttribute("color", new THREE.Float32BufferAttribute(R.c, 3));
+  const roofs = new THREE.Mesh(rgm, new THREE.MeshLambertMaterial({ vertexColors: true })); roofs.castShadow = true; roofs.receiveShadow = true; g.add(roofs);
+  // trees
+  const T = S.city.trees; if (T.length) {
+    const can = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.2, 1), new THREE.MeshLambertMaterial({ color: night ? "#2f5a35" : "#6e9f55", flatShading: true }), T.length);
+    const tr = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.45, 4, 6), new THREE.MeshLambertMaterial({ color: night ? "#3d3328" : "#7a6248" }), T.length);
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion(); T.forEach(([x, y], i) => { const s = 0.8 + ((x * 7.31 + y * 3.17) % 1 + 1) % 1 * 0.6; M.compose(V(x, y, 2 + 4 * s), Q, new THREE.Vector3(s, s * 1.1, s)); can.setMatrixAt(i, M); M.compose(V(x, y, 2), Q, new THREE.Vector3(1, 1, 1)); tr.setMatrixAt(i, M); });
+    can.castShadow = true; g.add(can); g.add(tr); }
+}
+function mergeAll(geos) { let n = 0; for (const g of geos) n += (g.index ? g.index.count : g.attributes.position.count); const pos = new Float32Array(n * 3); let o = 0;
+  for (const g0 of geos) { const g = g0.index ? g0.toNonIndexed() : g0, a = g.attributes.position.array; pos.set(a, o); o += a.length; g0.dispose(); }
+  const m = new THREE.BufferGeometry(); m.setAttribute("position", new THREE.BufferAttribute(pos, 3)); m.computeVertexNormals(); return m; }
+function sunFor(center, L) { sun.position.set(center.x - 900, 1400, center.z + 700); sun.target.position.copy(center); const s = Math.max(900, L * 0.75); const c = sun.shadow.camera; c.left = -s; c.right = s; c.top = s; c.bottom = -s; c.near = 10; c.far = 5000; c.updateProjectionMatrix(); }
+
+// ===================================================================== places, pads, corridor
+const P = S.city.places;
+function placeLabel(p) { return p.n; }
+function snapOpen(en) {   // nearest point with no building within ~14 m
+  const near = S.city.buildings.filter((b) => { const p = b.p; return Math.abs(p[0] - en[0]) < 600 && Math.abs(p[1] - en[1]) < 600; });
+  const free = (x, y) => { for (const b of near) for (const [dx, dy] of [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14]]) if (inPoly(x + dx, y + dy, b.p)) return false; return true; };
+  if (free(en[0], en[1])) return en;
+  for (let r = 15; r <= 420; r += 15) for (let k = 0; k < 24; k++) { const a = k / 24 * 2 * Math.PI, x = en[0] + r * Math.cos(a), y = en[1] + r * Math.sin(a); if (free(x, y)) return [x, y]; }
+  return en;
+}
+function inPoly(px, py, p) { let ins = false; const n = p.length / 2; for (let i = 0, j = n - 1; i < n; j = i++) { const xi = p[2 * i], yi = p[2 * i + 1], xj = p[2 * j], yj = p[2 * j + 1]; if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi + 1e-12) + xi) ins = !ins; } return ins; }
+function specFor(F, d) {
+  const z = [0]; for (let k = 1; k <= d.nh; k++) z.push(Math.round(k * d.ceil / d.nh) / FT);
+  return { L: F.L, module_length: d.mlen / FT, module_width: d.mwid / FT, n_lat: d.nlat, z_levels: z, vertical_ground_only: true, clearance: d.clearance / FT, res: 10, margin: 200, portal_depth: 2 };
+}
+function buildingsIn(F) { const out = [], pad = 450; for (const b of S.city.buildings) { const p = b.p, q = new Array(p.length); let cx = 0, cy = 0; for (let k = 0; k < p.length; k += 2) { const c = G.toCorr(F, p[k], p[k + 1]); q[k] = c[0]; q[k + 1] = c[1]; cx += c[0]; cy += c[1]; } cx /= p.length / 2; cy /= p.length / 2; if (cx > -pad && cx < F.L + pad && Math.abs(cy) < pad + 300) out.push({ p: q, h: b.h }); } return out; }
+function buildCorridor(from, to, design, auto) {   // auto: widen the corridor until the two pads connect
+  let k = corridorOnce(from, to, design), lanes = design.nlat;
+  while (auto && k.o < 0 && k.pads !== 0 && lanes < 11) { lanes += 2; k = corridorOnce(from, to, Object.assign({}, design, { nlat: lanes })); k.widened = lanes + 1; }
+  return k;
+}
+function corridorOnce(from, to, design) {
+  const a = snapOpen(from.e), b = snapOpen(to.e), F = G.corridorFrame(a, b), spec = specFor(F, design), blds = buildingsIn(F), C = G.buildCorridor(spec, blds);
+  // choose the take-off / landing pads closest to the two places that are actually connected through the air
+  const score = (n, end) => Math.abs(C.pos[n][0] - end) + Math.abs(C.pos[n][1]) * 0.5;
+  const Os = C.origins.slice().sort((x, y) => score(x, 0) - score(y, 0)), Ds = C.destinations.slice().sort((x, y) => score(x, C.L) - score(y, C.L));
+  let o = -1, d = -1;
+  for (const s of Os) { const seen = new Uint8Array(C.pos.length), q = [s]; seen[s] = 1;
+    while (q.length) { const u = q.pop(); for (const a of C.out[u]) { const v = C.at[a]; if (seen[v]) continue; seen[v] = 1; if (!C.ground[v]) q.push(v); } }
+    const hit = Ds.find((x) => seen[x]); if (hit != null) { o = s; d = hit; break; } }
+  return { C, F, spec, blds, o, d, a, b, pads: C.origins.length && C.destinations.length ? 1 : 0 };
+}
+let K = null;   // current corridor bundle
+const nodeV = (n, lift = 0) => { const p = K.C.pos[n], e = G.toEN(K.F, p[0], p[1]); return V(e[0], e[1], Math.max(p[2], 1.5) + lift); };
+
+// ===================================================================== weather
+function hourWx(h) { return S.wx.hours[Math.min(h, S.wx.hours.length - 1)]; }
+function profileAt(hw, zm) {   // m/s, from-deg at height zm (log interpolation between 10/80/120/180 m)
+  const H = S.wx.heights_m, s = hw.speed_ms, d = hw.dir_from_deg, z = Math.max(zm, 2);
+  if (z <= H[0]) return [s[0] * Math.pow(z / H[0], 0.25), d[0]]; if (z >= H[H.length - 1]) return [s[s.length - 1], d[d.length - 1]];
+  let k = 0; while (H[k + 1] < z) k++; const f = (Math.log(z) - Math.log(H[k])) / (Math.log(H[k + 1]) - Math.log(H[k]));
+  const u = (1 - f) * Math.sin(d[k] * Math.PI / 180) + f * Math.sin(d[k + 1] * Math.PI / 180), v = (1 - f) * Math.cos(d[k] * Math.PI / 180) + f * Math.cos(d[k + 1] * Math.PI / 180);
+  return [s[k] + f * (s[k + 1] - s[k]), (Math.atan2(u, v) * 180 / Math.PI + 360) % 360];
+}
+function layerWinds(hw, F, zl) { const bear = F.b * 180 / Math.PI; return zl.map((z) => { const [sp, df] = profileAt(hw, Math.max(z, 10)); const tm = 90 - ((df + 180) % 360); return [sp, ((tm - bear) % 360 + 360) % 360]; }); }
+const arrowSVG = (from) => `<svg viewBox="0 0 20 20" style="transform:rotate(${(from + 180) % 360}deg)"><path d="M10 2 L15 11 H11.5 V18 H8.5 V11 H5 Z" fill="currentColor"/></svg>`;
+const hourLabel = (t) => { if (!t) return "now"; const d = new Date(t); return isNaN(d) ? t.slice(11, 16) : d.toLocaleTimeString([], { hour: "numeric" }); };
+function weatherCard() {
+  const hw = hourWx(S.hour), rows = [400, 300, 200, 100].map((ft) => { const [s, d] = profileAt(hw, ft / FT); return { ft, mph: s * MPH, d }; }), mx = Math.max(25, ...rows.map((r) => r.mph));
+  return `<div class="wx">${rows.map((r) => `<div class="wxrow"><span>${r.ft} ft</span><span style="color:var(--ink-2)">${arrowSVG(r.d)}</span><div class="bar"><i style="width:${Math.min(100, r.mph / mx * 100)}%"></i></div><span class="v">${fmt(r.mph, 0)} mph ${compass(r.d)}</span></div>`).join("")}</div>
+    <p class="note">${esc(S.wx.source)}${S.wx.fetched ? ` · ${esc(S.wx.fetched)}` : ""}. Arrows point where the wind blows.</p>`;
+}
+function hoursStrip() {
+  return `<div class="hours" id="hours">${S.wx.hours.slice(0, 12).map((hw, i) => { const [s, d] = profileAt(hw, 400 / FT); return `<button type="button" class="hour${S.bestHour === i ? " best" : ""}" data-h="${i}" aria-pressed="${S.hour === i}">${i === 0 ? "Now" : hourLabel(hw.time)}<span style="color:var(--ink-2)">${arrowSVG(d)}</span><b>${fmt(s * MPH, 0)}</b>mph</button>`; }).join("")}</div>`;
+}
+async function liveWeather() {
+  const [lat, lon] = S.city.origin, H = [10, 80, 120, 180];
+  const q = `latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&wind_speed_unit=ms&forecast_days=2&timezone=UTC&hourly=${H.map((h) => "wind_speed_" + h + "m").concat(H.map((h) => "wind_direction_" + h + "m")).join(",")}`;
+  try { const d = await (await fetch("https://api.open-meteo.com/v1/forecast?" + q)).json(); if (d.error) throw new Error(d.reason);
+    const now = new Date().toISOString().slice(0, 13); let i0 = d.hourly.time.findIndex((t) => t >= now); if (i0 < 0) i0 = 0;
+    S.wx = { source: "Open-Meteo forecast", fetched: "live", heights_m: H, hours: d.hourly.time.slice(i0, i0 + 24).map((t, k) => ({ time: t + "Z", speed_ms: H.map((h) => d.hourly["wind_speed_" + h + "m"][i0 + k]), dir_from_deg: H.map((h) => d.hourly["wind_direction_" + h + "m"][i0 + k]) })) };
+    S.hour = 0; S.wcache = {}; toast("Live forecast loaded."); return true;
+  } catch (e) { toast("This published copy can't reach weather services, so it uses the forecast captured when it was built. Open the file locally for live updates."); return false; }
+}
+
+// ===================================================================== wind field (building-aware), cached by direction
+S.wcache = {};
+function urbanWind(C, F, hw) {
+  const lay = layerWinds(hw, F, C.z_levels), zs = C.z_levels.map((z) => Math.max(z, 10)), out = [], key0 = `${F.s[0].toFixed(0)},${F.s[1].toFixed(0)},${F.b.toFixed(4)},${C.L.toFixed(0)},${C.NW},${C.NH}`;
+  zs.forEach((z, k) => { const [sp, d] = lay[k], dk = Math.round(d / 5) * 5, key = `${key0}|${z}|${dk}`;
+    if (!S.wcache[key]) { const th = dk * Math.PI / 180, solid = new Uint8Array(C.grid.nx * C.grid.ny); for (let c = 0; c < solid.length; c++) solid[c] = C.grid.H[c] >= z ? 1 : 0;
+      S.wcache[key] = G.solveLayer(solid, C.grid.nx, C.grid.ny, C.grid.res, C.grid.x0, C.grid.y0, Math.cos(th), Math.sin(th), DATA.windp); }
+    const L = S.wcache[key], u = new Float64Array(L.u.length), v = new Float64Array(L.v.length); for (let c = 0; c < u.length; c++) { u[c] = L.u[c] * sp; v[c] = L.v[c] * sp; } out.push({ u, v }); });
+  return { z: zs, layers: out, nx: C.grid.nx, ny: C.grid.ny, res: C.grid.res, x0: C.grid.x0, y0: C.grid.y0 };
+}
+
+// ===================================================================== flight planning (Paper 1 engine)
+function planRoute(k, hourIdx, prio) {
+  const { C, F, o, d } = k; if (o < 0 || d < 0) return { error: k.pads ? "Buildings block every path between these places at this corridor size. Try more lanes or a higher ceiling in Settings." : "No open landing spot near one end. Try another place." };
+  const hw = hourWx(hourIdx), W = urbanWind(C, F, hw), wind = G.windFromUrban(C, W), none = G.windNone(C);
+  const ct = G.linkCosts(C, wind, S.veh), cn = G.linkCosts(C, none, S.veh);
+  const R = G.pareto(C, ct, wind, S.veh, o, d).routes; if (!R.length) return { error: "Buildings block every path between these places. Try a wider corridor in Settings." };
+  const calm = G.pareto(C, cn, none, S.veh, o, d).routes, tMin = Math.min(...R.map((r) => r.time)), eMin = Math.min(...R.map((r) => r.energy));
+  const score = (r) => prio === "fastest" ? [r.time, r.energy] : prio === "efficient" ? [r.energy, r.time] : [r.time / tMin + r.energy / eMin, r.time];
+  const rec = R.slice().sort((a, b) => score(a)[0] - score(b)[0] || score(a)[1] - score(b)[1])[0];
+  // what happens if the operator ignores the wind: plan in calm air, fly in the real wind
+  const naivePlan = calm.slice().sort((a, b) => score(a)[0] - score(b)[0] || score(a)[1] - score(b)[1])[0], naive = G.evaluate(C, ct, wind, naivePlan.arcs, 0, naivePlan.E[0]);
+  return { W, wind, R, rec, naive: Object.assign({ nodes: naivePlan.nodes, arcs: naivePlan.arcs }, naive, { time: naive.T[naive.T.length - 1], energy: naive.E[naive.E.length - 1] }), calm: calm[0], hw };
+}
+function describe(k, plan, r) {
+  const C = k.C, dist = r.arcs.reduce((s, a) => s + C.len[a], 0), alts = r.nodes.map((n) => C.pos[n][2] * FT), tAir = [];
+  for (let i = 0; i < r.nodes.length - 1; i++) tAir.push([0.5 * (alts[i] + alts[i + 1]), r.T[i + 1] - r.T[i]]);
+  const cruise = Object.entries(tAir.reduce((m, [a, t]) => { const key = Math.round(a / 50) * 50; m[key] = (m[key] || 0) + t; return m; }, {})).sort((a, b) => b[1] - a[1])[0][0];
+  let tw = 0, tt = 0; for (let i = 0; i < r.arcs.length; i++) { const a = r.arcs[i], p = C.pos[C.af[a]], q = C.pos[C.at[a]], hx = q[0] - p[0], hy = q[1] - p[1], hh = Math.hypot(hx, hy); if (hh < 1) continue;
+    const u = 0.5 * (plan.wind.bins[0].u[C.af[a]] + plan.wind.bins[0].u[C.at[a]]), v = 0.5 * (plan.wind.bins[0].v[C.af[a]] + plan.wind.bins[0].v[C.at[a]]), dt = r.T[i + 1] - r.T[i]; tw += (u * hx + v * hy) / hh * dt; tt += dt; }
+  return { miles: dist * FT / 5280, min: r.time / 60, wh: r.energy / 3600, batt: 100 * r.energy / 3600 / S.veh.battery_wh, cruise: +cruise, along: tt ? tw / tt : 0, maxAlt: Math.max(...alts) };
+}
+
+// ===================================================================== drawing: corridor, routes, drones, particles
+function drawCorridor() {
+  const g = group("corr"), C = K.C, half = C.half, top = C.z_levels[C.z_levels.length - 1];
+  const box = new THREE.BoxGeometry(C.L, top, 2 * half); box.translate(C.L / 2, top / 2, 0);
+  const m = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.05, depthWrite: false }));
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.35 }));
+  const holder = new THREE.Group(); holder.add(m); holder.add(e); holder.position.copy(V(K.F.s[0], K.F.s[1], 0)); holder.rotation.y = K.F.b; g.add(holder);
+  const net = group("net"); net.visible = S.net; const v = []; for (const [a, b] of C.edges) { const p = nodeV(a), q = nodeV(b); v.push(p.x, p.y, p.z, q.x, q.y, q.z); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); net.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.18 })));
+  for (const n of [K.o, K.d]) { if (n < 0) continue; const pad = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 0.8, 32), new THREE.MeshLambertMaterial({ color: col("--corridor") })); pad.position.copy(nodeV(n)); pad.position.y = 0.6; g.add(pad);
+    const h = new THREE.Mesh(new THREE.RingGeometry(6, 9, 4, 1, 0, Math.PI * 2), new THREE.MeshBasicMaterial({ color: 0xffffff })); h.rotation.x = -Math.PI / 2; h.position.copy(pad.position); h.position.y = 1.1; g.add(h); }
+}
+function makeDrone(c, s) {
+  const g = new THREE.Group(), m = new THREE.MeshLambertMaterial({ color: col(c) }), dk = new THREE.MeshLambertMaterial({ color: 0x2a2f36 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.6 * s, 0.7 * s, 1.6 * s), m); body.castShadow = true; g.add(body);
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(6 * s, 0.22 * s, 0.32 * s), dk); arm.rotation.y = a; g.add(arm); }
+  g.rotors = []; for (const [x, z] of [[2.1, 2.1], [-2.1, 2.1], [2.1, -2.1], [-2.1, -2.1]]) { const r = new THREE.Group(); r.position.set(x * s, 0.55 * s, z * s);
+    r.add(new THREE.Mesh(new THREE.CylinderGeometry(1.45 * s, 1.45 * s, 0.04 * s, 24), new THREE.MeshBasicMaterial({ color: col(c), transparent: true, opacity: 0.25 })));
+    r.add(new THREE.Mesh(new THREE.BoxGeometry(2.8 * s, 0.05 * s, 0.25 * s), dk)); g.add(r); g.rotors.push(r); }
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.35 * s, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3b3b })); light.position.set(-1.4 * s, 0.2 * s, 0); g.add(light); g.light = light;
+  return g;
+}
+function tube(nodes, c, r, op) { const pts = nodes.map((n) => nodeV(n, 2)); return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.05), Math.max(40, pts.length * 10), r, 10, false), new THREE.MeshLambertMaterial({ color: col(c), transparent: op < 1, opacity: op })); }
+function drawPlan() {
+  const g = group("routes"), pl = S.plan; S.drones = []; if (!pl || pl.error) return;
+  g.add(tube(pl.naive.nodes, "--naive", 2.4, 0.75)); g.add(tube(pl.rec.nodes, "--aware", 3.4, 0.95));
+  const s = Math.max(3.5, Math.min(9, K.C.L / 350));
+  for (const [r, c] of [[pl.rec, "--aware"], [pl.naive, "--naive"]]) { const d = makeDrone(c, s); g.add(d); S.drones.push({ d, r, s }); }
+  S.anim.tmax = Math.max(pl.rec.time, pl.naive.time) + 3; S.anim.rate = S.anim.tmax / 16; S.anim.t = 0; S.anim.playing = !REDUCED;
+}
+function flyFrame(dt) {
+  const t = S.anim.t; for (const { d, r, s } of S.drones || []) { let i = 0; while (i < r.T.length - 2 && r.T[i + 1] < t) i++; const f = Math.min(1, Math.max(0, (t - r.T[i]) / ((r.T[i + 1] - r.T[i]) || 1))), a = nodeV(r.nodes[i], 2), b = nodeV(r.nodes[Math.min(i + 1, r.nodes.length - 1)], 2);
+    d.position.copy(a.clone().lerp(b, f)); d.position.y += s * 1.6; const v = b.clone().sub(a); if (v.x || v.z) d.rotation.y = Math.atan2(-v.z, v.x); d.rotation.z = Math.max(-0.25, Math.min(0.25, -v.y / (Math.hypot(v.x, v.z) + 1)));
+    if (!REDUCED) d.rotors.forEach((ro, k) => ro.rotation.y += (k % 2 ? 1 : -1) * dt * 45); d.light.visible = Math.floor(performance.now() / 500) % 2 === 0; }
+  if (S.follow && S.drones && S.drones[0]) { const p = S.drones[0].d.position; controls.target.lerp(p, 0.12); camera.position.lerp(p.clone().add(new THREE.Vector3(-160, 140, 170)), 0.06); }
+}
+const PART = { n: 1500, T: 10 };
+function initParticles() { const g = group("particles"); PART.pos = new Float32Array(PART.n * PART.T * 2); PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
+  PART.seg = new Float32Array(PART.n * (PART.T - 1) * 6); PART.col = new Float32Array(PART.n * (PART.T - 1) * 6); PART.geo = new THREE.BufferGeometry();
+  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })); g.add(PART.mesh); }
+const solidAt = (x, y, z) => { const gr = K.C.grid; const i = Math.floor((x - gr.x0) / gr.res), j = Math.floor((y - gr.y0) / gr.res); if (i < 0 || j < 0 || i >= gr.nx || j >= gr.ny) return true; return gr.H[i * gr.ny + j] >= z; };
+function spawn(i, z) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solidAt(x, y, z) && k < 20); for (let t = 0; t < PART.T; t++) { PART.pos[(i * PART.T + t) * 2] = x; PART.pos[(i * PART.T + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = 0; }
+const tmp = [0, 0];
+function particles(dt) {
+  const on = S.plan && S.plan.W && S.screen !== "disp" && S.screen !== "val"; PART.mesh.visible = !!on; if (!on) return;
+  const z = (S.windAlt || 300) / FT, bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
+  for (let i = 0; i < PART.n; i++) { PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i] || PART.z !== z) spawn(i, z); const b = i * PART.T * 2;
+    for (let k = PART.T - 1; k > 0; k--) { PART.pos[b + 2 * k] = PART.pos[b + 2 * k - 2]; PART.pos[b + 2 * k + 1] = PART.pos[b + 2 * k - 1]; }
+    G.sample(S.plan.W, PART.pos[b], PART.pos[b + 1], z, tmp); PART.pos[b] += tmp[0] * dt * 24; PART.pos[b + 1] += tmp[1] * dt * 24; if (solidAt(PART.pos[b], PART.pos[b + 1], z)) spawn(i, z);
+    const f = Math.min(1, Math.hypot(tmp[0], tmp[1]) / vmax), c = f < 0.5 ? ramp[0].clone().lerp(ramp[1], f * 2) : ramp[1].clone().lerp(ramp[2], (f - 0.5) * 2);
+    for (let k = 0; k < PART.T - 1; k++) { const s = (i * (PART.T - 1) + k) * 6, e0 = G.toEN(K.F, PART.pos[b + 2 * k], PART.pos[b + 2 * k + 1]), e1 = G.toEN(K.F, PART.pos[b + 2 * k + 2], PART.pos[b + 2 * k + 3]);
+      PART.seg[s] = e0[0]; PART.seg[s + 1] = z; PART.seg[s + 2] = -e0[1]; PART.seg[s + 3] = e1[0]; PART.seg[s + 4] = z; PART.seg[s + 5] = -e1[1];
+      const cc = bg.clone().lerp(c, 0.25 + 0.75 * (1 - k / (PART.T - 1)) * Math.min(1, PART.age[i] * 2)); PART.col.set([cc.r, cc.g, cc.b, cc.r, cc.g, cc.b], s); } }
+  PART.z = z; PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true;
+}
+function frameView() { const C = K.C, a = G.toEN(K.F, 0, 0), b = G.toEN(K.F, C.L, 0), mid = V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0), L = Math.max(600, C.L), back = G.toEN(K.F, -0.35 * L, -0.75 * L);
+  controls.target.copy(mid.clone().setY(30)); camera.position.copy(V(back[0], back[1], 0.62 * L + 220)); sunFor(mid, L); }
+function pins() { if (!K) return; for (const [id, n] of [["pinA", K.o], ["pinB", K.d]]) { const el = $(id); if (n < 0 || S.screen === "disp" || S.screen === "val") { el.style.display = "none"; continue; } const p = nodeV(n).setY(0).project(camera), vis = p.z < 1 && Math.abs(p.x) < 1.1 && Math.abs(p.y) < 1.1;
+  el.style.display = vis ? "block" : "none"; el.style.left = `${(p.x + 1) / 2 * innerWidth}px`; el.style.top = `${(1 - p.y) / 2 * innerHeight}px`; } }
+
+// ===================================================================== charts & export
+function chart(cv, series, o) {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); cv.width = r.width * dpr; cv.height = r.height * dpr; const x = cv.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, r.width, r.height);
+  const xs = [], ys = []; series.forEach((s) => s.pts.forEach(([a, b]) => { if (isFinite(a) && isFinite(b)) { xs.push(a); ys.push(b); } })); if (!xs.length) return null;
+  let x0 = o.xmin ?? Math.min(...xs), x1 = o.xmax ?? Math.max(...xs), y0 = o.ymin ?? Math.min(...ys), y1 = o.ymax ?? Math.max(...ys);
+  if (x1 - x0 < 1e-9) { x1 += 1; x0 -= 1; } if (y1 - y0 < 1e-9) { const p = Math.max(Math.abs(y0) * 0.1, 1); y1 += p; y0 -= p; } if (o.ymin == null) y0 -= (y1 - y0) * 0.06; if (o.ymax == null) y1 += (y1 - y0) * 0.06;
+  const m = { l: 42, r: 10, t: 22, b: 24 }, w = r.width, h = r.height, X = (v) => m.l + (v - x0) / (x1 - x0) * (w - m.l - m.r), Y = (v) => h - m.b - (v - y0) / (y1 - y0) * (h - m.t - m.b);
+  x.font = `10.5px ${css("--font-mono")}`; x.strokeStyle = css("--rule"); x.fillStyle = css("--ink-3"); x.lineWidth = 1;
+  for (let k = 0; k <= 3; k++) { const v = y0 + (y1 - y0) * k / 3; x.beginPath(); x.moveTo(m.l, Y(v)); x.lineTo(w - m.r, Y(v)); x.stroke(); x.textAlign = "right"; x.fillText(Math.abs(y1 - y0) > 8 ? v.toFixed(0) : v.toFixed(1), m.l - 5, Y(v) + 3); }
+  (o.xticks || [0, 1, 2, 3, 4].map((k) => x0 + (x1 - x0) * k / 4).map((v) => [v, Math.abs(x1 - x0) > 8 ? v.toFixed(0) : v.toFixed(1)])).forEach(([v, l]) => { x.textAlign = "center"; x.fillText(l, X(v), h - 8); });
+  x.textAlign = "left"; x.fillStyle = css("--ink-2"); x.font = `11px ${css("--font-body")}`; x.fillText(o.ylab || "", 2, 10); x.textAlign = "right"; x.fillText(o.xlab || "", w - m.r, h - 0);
+  for (const s of series) { x.strokeStyle = x.fillStyle = css(s.c); x.lineWidth = s.w || 2.2; x.setLineDash(s.dash ? [5, 4] : []);
+    if (s.bars) { const bw = Math.max(2, (X(x0 + 1) - X(x0)) * (s.bw || 0.62)); s.pts.forEach(([a, b], i) => { x.globalAlpha = s.hi === i ? 1 : 0.55; x.fillRect(X(a) - bw / 2, Y(b), bw, Y(y0) - Y(b)); }); x.globalAlpha = 1; continue; }
+    x.beginPath(); s.pts.forEach(([a, b], i) => i ? x.lineTo(X(a), Y(b)) : x.moveTo(X(a), Y(b))); x.stroke(); x.setLineDash([]);
+    if (s.dots) s.pts.forEach(([a, b]) => { x.beginPath(); x.arc(X(a), Y(b), 3.2, 0, 7); x.fill(); }); }
+  if (o.vline != null) { x.strokeStyle = css("--brand"); x.lineWidth = 1.5; x.beginPath(); x.moveTo(X(o.vline), m.t); x.lineTo(X(o.vline), h - m.b); x.stroke(); }
+  return { X, Y };
+}
+let downloads = null; if (window.claude && window.claude.use) window.claude.use("downloads").then((d) => { downloads = d; }).catch(() => {});
+async function saveCSV(name, rows) {
+  const text = rows.map((r) => r.map((v) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
+  if (downloads) { try { await downloads.save({ filename: name, data: text }); toast("Saved."); return; } catch (e) { if (e && e.code === "declined") return; } }
+  try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); toast("Downloading…"); }
+  catch (e) { try { await navigator.clipboard.writeText(text); toast("Copied the table to the clipboard."); } catch (e2) { toast("Download is not available in this view."); } }
+}
+
+// ===================================================================== PLAN screen
+function placeOptions() { return P.map((p, i) => `<option value="${esc(p.n)}"></option>`).join(""); }
+function findPlace(name) { const n = name.trim().toLowerCase(); return P.find((p) => p.n.toLowerCase() === n) || P.find((p) => p.n.toLowerCase().includes(n)); }
+function leftPlan() {
+  const r = S.routes;
+  return `<div class="blk"><h2><span><span class="step">1</span>Where</span><small>pick a place or click the map</small></h2>
+    <datalist id="places">${placeOptions()}</datalist>
+    <label class="field"><span>From</span><div class="inrow"><input type="text" id="from" list="places" placeholder="Search a place…" value="${esc(S.from ? S.from.n : "")}"><button class="btn icon" type="button" id="pickFrom" title="Pick on map" aria-label="Pick From on map">⌖</button></div></label>
+    <label class="field"><span>To</span><div class="inrow"><input type="text" id="to" list="places" placeholder="Search a place…" value="${esc(S.to ? S.to.n : "")}"><button class="btn icon" type="button" id="pickTo" title="Pick on map" aria-label="Pick To on map">⌖</button></div></label>
+    <div class="inrow"><button class="btn" type="button" id="swap">⇅ Swap</button><button class="btn" type="button" id="save">＋ Save route</button></div>
+    ${r.length ? `<div class="chips">${r.map((x, i) => `<span class="chip${i === S.active ? " on" : ""}"><span data-open="${i}" style="cursor:pointer">${esc(x.from.n)} → ${esc(x.to.n)}</span><button type="button" data-del="${i}" aria-label="Remove route">✕</button></span>`).join("")}</div>
+      <button class="btn" type="button" id="compare">Compare all ${r.length} routes</button>` : `<p class="note">Save several routes to compare them side by side.</p>`}
+  </div>
+  <div class="blk"><h2><span><span class="step">2</span>When</span><small>wind at 400 ft</small></h2>${hoursStrip()}
+    ${weatherCard()}<div class="inrow"><button class="btn" type="button" id="live">↻ Live forecast</button><button class="btn" type="button" id="best">Best time to leave</button></div></div>
+  <div class="blk"><h2><span><span class="step">3</span>Priority</span></h2>
+    <div class="seg"><button type="button" data-p="fastest" aria-pressed="${S.priority === "fastest"}">Fastest</button><button type="button" data-p="balanced" aria-pressed="${S.priority === "balanced"}">Balanced</button><button type="button" data-p="efficient" aria-pressed="${S.priority === "efficient"}">Lowest energy</button></div>
+    <button class="btn go" type="button" id="planBtn">Plan flight</button>
+    ${settingsBlock()}</div>`;
+}
+function settingsBlock() { const d = S.design, v = S.veh; return `<details><summary>Settings: corridor and drone</summary><div class="grid3">
+  <label class="field"><span>Lanes</span><input type="number" id="s-lanes" min="2" max="10" value="${d.nlat + 1}"></label><label class="field"><span>Altitude layers</span><input type="number" id="s-layers" min="1" max="8" value="${d.nh}"></label><label class="field"><span>Ceiling (ft)</span><input type="number" id="s-ceil" min="100" max="400" step="50" value="${d.ceil}"></label>
+  <label class="field"><span>Lane width (ft)</span><input type="number" id="s-wid" min="60" max="400" step="20" value="${d.mwid}"></label><label class="field"><span>Block length (ft)</span><input type="number" id="s-len" min="200" max="2000" step="100" value="${d.mlen}"></label><label class="field"><span>Clearance (ft)</span><input type="number" id="s-clr" min="0" max="100" step="5" value="${d.clearance}"></label>
+  <label class="field"><span>Cruise (mph)</span><input type="number" id="s-spd" min="15" max="60" value="${v.cruise_mph}"></label><label class="field"><span>Battery (Wh)</span><input type="number" id="s-bat" min="50" max="2000" step="10" value="${v.battery_wh}"></label><label class="field"><span>Climb &amp; take-off</span><select id="s-ph"><option value="1"${v.phase_dependent ? " selected" : ""}>Included</option><option value="0"${v.phase_dependent ? "" : " selected"}>Cruise only</option></select></label>
+  </div><p class="note">Energy follows the published wind-aware routing model: 20.42 J per foot in calm air, scaled by how much the wind speeds up or slows down each leg.</p></details>`; }
+function wirePlan() {
+  const setPlace = (which, name) => { const p = findPlace(name); if (!p) { toast("Place not found. Pick one from the list or click the map."); return; } S[which] = p; refreshCorridor(); };
+  $("from").onchange = (e) => setPlace("from", e.target.value); $("to").onchange = (e) => setPlace("to", e.target.value);
+  $("pickFrom").onclick = () => startPick("from"); $("pickTo").onclick = () => startPick("to");
+  $("swap").onclick = () => { [S.from, S.to] = [S.to, S.from]; renderLeft(); refreshCorridor(); };
+  $("save").onclick = () => { if (!S.from || !S.to) return; S.routes.push({ from: S.from, to: S.to }); S.active = S.routes.length - 1; renderLeft(); toast("Route saved."); };
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => { S.routes.splice(+b.dataset.del, 1); S.active = -1; renderLeft(); });
+  document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { const x = S.routes[+b.dataset.open]; S.active = +b.dataset.open; S.from = x.from; S.to = x.to; renderLeft(); refreshCorridor(); });
+  if ($("compare")) $("compare").onclick = compareRoutes;
+  document.querySelectorAll("#hours .hour").forEach((b) => b.onclick = () => { S.hour = +b.dataset.h; renderLeft(); runPlan(); });
+  $("live").onclick = async () => { if (await liveWeather()) { renderLeft(); runPlan(); } };
+  $("best").onclick = bestTime;
+  document.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => { S.priority = b.dataset.p; renderLeft(); runPlan(); });
+  $("planBtn").onclick = runPlan;
+  wireSettings(() => { refreshCorridor(); });
+}
+function wireSettings(after) {
+  const d = S.design, v = S.veh, n = (id, f) => { const el = $(id); if (el) el.onchange = (e) => { f(+e.target.value); S.wcache = {}; after(); }; };
+  n("s-lanes", (x) => d.nlat = Math.max(1, Math.min(9, (x | 0) - 1))); n("s-layers", (x) => d.nh = Math.max(1, Math.min(8, x | 0))); n("s-ceil", (x) => d.ceil = Math.max(100, Math.min(400, x)));
+  n("s-wid", (x) => d.mwid = Math.max(60, x)); n("s-len", (x) => d.mlen = Math.max(200, x)); n("s-clr", (x) => d.clearance = Math.max(0, x));
+  n("s-spd", (x) => v.cruise_mph = Math.max(15, Math.min(60, x))); n("s-bat", (x) => v.battery_wh = Math.max(50, x)); n("s-ph", (x) => v.phase_dependent = !!x);
+}
+function refreshCorridor() {
+  if (!S.from || !S.to) return; if (S.from === S.to) { toast("From and To are the same place."); return; }
+  K = buildCorridor(S.from, S.to, S.design, S.screen === "plan"); drawCorridor(); frameView();
+  if (K.widened && S.screen === "plan") toast(`Tall buildings block a ${S.design.nlat + 1}-lane corridor here, so it was widened to ${K.widened} lanes.`);
+  $("pinAt").innerHTML = `${esc(S.from.n)}<small>From</small>`; $("pinBt").innerHTML = `${esc(S.to.n)}<small>To</small>`;
+  if (S.screen === "plan") runPlan(); else if (S.screen === "cap") runCapacity();
+}
+function runPlan() {
+  if (!K) return; $("right").innerHTML = `<div class="blk"><h2>Planning…</h2><div class="prog"><i style="width:60%"></i></div></div>`;
+  setTimeout(() => { const t0 = performance.now(); S.plan = planRoute(K, S.hour, S.priority); S.plan.ms = performance.now() - t0; if (S.plan.error) { $("right").innerHTML = `<div class="blk"><div class="verdict bad">${S.plan.error}</div></div>`; group("routes"); return; }
+    const cr = describe(K, S.plan, S.plan.rec); S.windAlt = cr.cruise; drawPlan(); rightPlan(); }, 30);
+}
+function rightPlan() {
+  const pl = S.plan, a = describe(K, pl, pl.rec), n = describe(K, pl, pl.naive), cm = describe(K, { wind: G.windNone(K.C) }, pl.calm);
+  const dE = 100 * (1 - pl.rec.energy / pl.naive.energy), dT = (pl.naive.time - pl.rec.time) / 60, windEff = 100 * (pl.rec.energy / pl.calm.energy - 1);
+  const hw = pl.hw, [s400, d400] = profileAt(hw, 400 / FT), feel = a.along > 1.5 ? `a tailwind of about ${fmt(a.along, 0)} mph along the route` : a.along < -1.5 ? `a headwind of about ${fmt(-a.along, 0)} mph along the route` : "mostly crosswind";
+  const opts = (() => { const R = pl.R, fast = R.reduce((p, q) => q.time < p.time ? q : p), eco = R.reduce((p, q) => q.energy < p.energy ? q : p); const l = [["Fastest", fast], ["Balanced", pl.rec], ["Lowest energy", eco]], seen = new Set(); return l.filter(([, r]) => !seen.has(r) && seen.add(r)).map(([k, r], _, arr) => arr.length === 1 ? ["Best on both", r] : [k, r]); })();
+  $("right").innerHTML = `<div class="blk"><h2>Recommended flight <small>${hourLabel(hw.time) === "now" || S.hour === 0 ? "departing now" : "departing " + hourLabel(hw.time)}</small></h2>
+    <div class="answer">
+      <div class="metric hero"><div class="k">Flight time</div><div class="v">${fmt(a.min, 1)} <small>min</small></div><div class="d">${fmt(a.miles, 2)} mi · cruising at ${a.cruise} ft</div></div>
+      <div class="metric"><div class="k">Energy</div><div class="v">${fmt(a.wh, 1)} <small>Wh</small></div><div class="d">${fmt(a.batt, 0)}% of a ${S.veh.battery_wh} Wh battery</div></div>
+      <div class="metric"><div class="k">Wind effect</div><div class="v ${windEff > 0 ? "up" : "down"}">${windEff > 0 ? "+" : ""}${fmt(windEff, 0)}<small>% energy</small></div><div class="d">vs the same trip in calm air</div></div>
+    </div>
+    <div class="verdict ${dE > 0.5 ? "good" : ""}">Wind ${fmt(s400 * MPH, 0)} mph from ${compass(d400)} at 400 ft gives ${feel}. ${dE > 0.5 ? `Planning with the wind uses <b>${fmt(dE, 0)}% less energy</b>${dT > 0.05 ? ` and arrives <b>${fmt(dT * 60, 0)} s sooner</b>` : ""} than a route planned without it (orange).` : "Here the wind-aware route and a calm-air plan are about the same."}</div></div>
+  <div class="blk"><h2>Along the route</h2><div class="tabs" id="ptabs"><button type="button" data-t="alt" aria-pressed="true">Altitude</button><button type="button" data-t="en" aria-pressed="false">Energy used</button><button type="button" data-t="wind" aria-pressed="false">Wind on the nose</button></div><canvas class="chart" id="pc"></canvas>
+    <p class="note"><span class="sw" style="background:var(--aware)"></span>wind-aware <span class="sw" style="background:var(--naive);margin-left:8px"></span>planned ignoring wind (flown in the real wind)</p></div>
+  <div class="blk"><h2>Other options <small>${pl.R.length} trade-off route${pl.R.length > 1 ? "s" : ""}</small></h2><div class="tw"><table><thead><tr><th>Option</th><th>Time</th><th>Energy</th><th>Battery</th><th>Cruise</th></tr></thead><tbody>${opts.map(([k, r]) => { const d = describe(K, pl, r); return `<tr><td>${k}</td><td class="m">${fmt(d.min, 1)} min</td><td class="m">${fmt(d.wh, 1)} Wh</td><td class="m">${fmt(d.batt, 0)}%</td><td class="m">${d.cruise} ft</td></tr>`; }).join("")}
+    <tr><td style="color:var(--naive)">Ignoring wind</td><td class="m">${fmt(n.min, 1)} min</td><td class="m">${fmt(n.wh, 1)} Wh</td><td class="m">${fmt(n.batt, 0)}%</td><td class="m">${n.cruise} ft</td></tr></tbody></table></div>
+    <div class="inrow"><button class="btn" type="button" id="replay">▶ Replay flight</button><button class="btn" type="button" id="csvPlan">Download CSV</button></div>
+    <p class="note">Computed in ${fmt(pl.ms / 1000, 1)} s on a ${K.C.NW + 1}-lane, ${K.C.NH}-layer corridor (${K.C.removed_links} links closed by buildings).</p></div>
+  <div class="blk" id="extra"></div>`;
+  const draw = (t) => { const P0 = profileOf(pl.rec, pl), P1 = profileOf(pl.naive, pl), lab = { alt: "ft", en: "Wh", wind: "mph tailwind (+) / headwind (−)" }[t];
+    chart($("pc"), [{ c: "--naive", pts: P1[t], w: 1.8 }, { c: "--aware", pts: P0[t] }], { ylab: lab, xlab: "miles", ymin: t === "alt" || t === "en" ? 0 : undefined }); };
+  draw("alt"); document.querySelectorAll("#ptabs button").forEach((b) => b.onclick = () => { document.querySelectorAll("#ptabs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); draw(b.dataset.t); });
+  $("replay").onclick = () => { S.anim.t = 0; S.anim.playing = true; };
+  $("csvPlan").onclick = () => saveCSV("corridoriq_flight.csv", [["option", "minutes", "Wh", "battery_pct", "cruise_ft", "miles"]].concat(opts.map(([k, r]) => { const d = describe(K, pl, r); return [k, d.min.toFixed(2), d.wh.toFixed(1), d.batt.toFixed(1), d.cruise, d.miles.toFixed(3)]; })).concat([["ignoring wind", n.min.toFixed(2), n.wh.toFixed(1), n.batt.toFixed(1), n.cruise, n.miles.toFixed(3)]]));
+}
+function profileOf(r, pl) { const C = K.C, x = [0]; for (let i = 0; i < r.arcs.length; i++) x.push(x[i] + C.len[r.arcs[i]] * FT / 5280);
+  const alt = r.nodes.map((n, i) => [x[i], C.pos[n][2] * FT]), en = r.E.map((e, i) => [x[i], e / 3600]), wind = [];
+  for (let i = 0; i < r.arcs.length; i++) { const a = r.arcs[i], p = C.pos[C.af[a]], q = C.pos[C.at[a]], hx = q[0] - p[0], hy = q[1] - p[1], hh = Math.hypot(hx, hy); if (hh < 1) continue;
+    const u = 0.5 * (pl.wind.bins[0].u[C.af[a]] + pl.wind.bins[0].u[C.at[a]]), v = 0.5 * (pl.wind.bins[0].v[C.af[a]] + pl.wind.bins[0].v[C.at[a]]); wind.push([(x[i] + x[i + 1]) / 2, (u * hx + v * hy) / hh]); }
+  return { alt, en, wind };
+}
+function bestTime() {
+  if (!K) return; const n = Math.min(12, S.wx.hours.length), out = [], ex = $("extra"); if (!ex) return; ex.innerHTML = `<h2>Best time to leave</h2><div class="prog"><i id="bt-bar"></i></div>`; let h = 0;
+  const step = () => { if (h >= n) return done(); const pl = planRoute(K, h, S.priority); if (!pl.error) out.push({ h, t: pl.rec.time / 60, e: pl.rec.energy / 3600, hw: pl.hw }); $("bt-bar").style.width = `${100 * (h + 1) / n}%`; h++; setTimeout(step, 10); };
+  const done = () => { const best = out.reduce((p, q) => q.e < p.e ? q : p, out[0]); S.bestHour = best.h;
+    ex.innerHTML = `<h2>Best time to leave <small>next ${n} hours</small></h2><canvas class="chart" id="bt"></canvas>
+      <div class="verdict good">Leave <b>${best.h === 0 ? "now" : "at " + hourLabel(best.hw.time)}</b>: ${fmt(best.e, 1)} Wh and ${fmt(best.t, 1)} min${out[0] && best.h !== 0 ? `, ${fmt(100 * (1 - best.e / out[0].e), 0)}% less energy than leaving now` : ""}.</div>
+      <div class="inrow"><button class="btn" type="button" id="csvBest">Download CSV</button></div>`;
+    chart($("bt"), [{ c: "--aware", bars: true, hi: out.indexOf(best), pts: out.map((o, i) => [i, o.e]) }], { ylab: "Wh", ymin: 0, xmin: -0.6, xmax: out.length - 0.4, xlab: "departure", xticks: out.map((o, i) => [i, i === 0 ? "now" : hourLabel(o.hw.time)]).filter((_, i) => i % 2 === 0) });
+    $("csvBest").onclick = () => saveCSV("corridoriq_departure_times.csv", [["departure", "minutes", "Wh", "wind_400ft_mph", "wind_from_deg"]].concat(out.map((o) => { const [s, d] = profileAt(o.hw, 400 / FT); return [o.hw.time || "now", o.t.toFixed(2), o.e.toFixed(1), (s * MPH).toFixed(1), d.toFixed(0)]; })));
+    renderLeft(); ex.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "nearest" }); };
+  step();
+}
+function compareRoutes() {
+  const list = S.routes, out = []; $("right").innerHTML = `<div class="blk"><h2>Comparing ${list.length} routes…</h2><div class="prog"><i id="cmp-bar"></i></div></div>`; let i = 0;
+  const step = () => { if (i >= list.length) return done(); const x = list[i], k = buildCorridor(x.from, x.to, S.design, true), pl = planRoute(k, S.hour, S.priority);
+    if (!pl.error) { const saveK = K; K = k; const a = describe(k, pl, pl.rec), n = describe(k, pl, pl.naive); K = saveK; out.push({ x, a, n, calmE: pl.calm.energy / 3600 }); } else out.push({ x, err: pl.error });
+    $("cmp-bar").style.width = `${100 * (i + 1) / list.length}%`; i++; setTimeout(step, 10); };
+  const done = () => { $("right").innerHTML = `<div class="blk"><h2>Route comparison <small>${S.hour === 0 ? "now" : hourLabel(hourWx(S.hour).time)}</small></h2>
+    <div class="tw"><table><thead><tr><th>Route</th><th>Miles</th><th>Min</th><th>Wh</th><th>Battery</th><th>Cruise</th><th>Wind</th><th>Saved</th></tr></thead><tbody>${out.map((o, i) => o.err ? `<tr><td title="${esc(o.err)}">${i + 1}. ${esc(o.x.from.n.slice(0, 12))} → ${esc(o.x.to.n.slice(0, 12))}</td><td colspan="7" style="text-align:left;color:var(--bad)">no path</td></tr>` :
+      `<tr><td title="${esc(o.x.from.n)} → ${esc(o.x.to.n)}">${i + 1}. ${esc(o.x.from.n.slice(0, 12))} → ${esc(o.x.to.n.slice(0, 12))}</td><td class="m">${fmt(o.a.miles, 2)}</td><td class="m">${fmt(o.a.min, 1)}</td><td class="m">${fmt(o.a.wh, 1)}</td><td class="m">${fmt(o.a.batt, 0)}%</td><td class="m">${o.a.cruise}</td><td class="m ${o.a.wh > o.calmE ? "up" : "down"}">${o.a.wh > o.calmE ? "+" : ""}${fmt(100 * (o.a.wh / o.calmE - 1), 0)}%</td><td class="m">${fmt(100 * (1 - o.a.wh / o.n.wh), 0)}%</td></tr>`).join("")}</tbody></table></div>
+    <p class="note"><span class="sw" style="background:var(--naive)"></span>planned ignoring wind <span class="sw" style="background:var(--aware);margin-left:8px"></span>wind-aware. Wind: energy change against calm air. Saved: energy saved by planning with the wind instead of ignoring it.</p>
+    <canvas class="chart" id="cmpc"></canvas><button class="btn" type="button" id="csvCmp">Download CSV</button></div>`;
+    const ok = out.filter((o) => !o.err); chart($("cmpc"), [{ c: "--naive", bars: true, bw: 0.34, pts: ok.map((o, i) => [i - 0.18, o.n.wh]) }, { c: "--aware", bars: true, bw: 0.34, pts: ok.map((o, i) => [i + 0.18, o.a.wh]) }], { ylab: "Wh", ymin: 0, xmin: -0.6, xmax: ok.length - 0.4, xticks: ok.map((o, i) => [i, `Route ${out.indexOf(o) + 1}`]) });
+    $("csvCmp").onclick = () => saveCSV("corridoriq_routes.csv", [["from", "to", "miles", "minutes", "Wh", "battery_pct", "cruise_ft", "wind_vs_calm_pct", "saved_vs_ignoring_wind_pct", "minutes_ignoring_wind", "Wh_ignoring_wind"]].concat(out.filter((o) => !o.err).map((o) => [o.x.from.n, o.x.to.n, o.a.miles.toFixed(3), o.a.min.toFixed(2), o.a.wh.toFixed(1), o.a.batt.toFixed(1), o.a.cruise, (100 * (o.a.wh / o.calmE - 1)).toFixed(1), (100 * (1 - o.a.wh / o.n.wh)).toFixed(1), o.n.min.toFixed(2), o.n.wh.toFixed(1)])));
+  };
+  step();
+}
+
+// ===================================================================== CAPACITY screen (Paper 2 engine)
+function leftCap() {
+  const c = S.cap; return `<div class="blk"><h2><span><span class="step">1</span>Corridor</span></h2><p class="note" style="margin-top:-4px">${S.from ? esc(S.from.n) + " → " + esc(S.to.n) + " · change it in Plan flights" : "Set From and To in Plan flights"}</p>
+    <div class="seg">${Object.entries(SIZES).map(([k, s]) => `<button type="button" data-z="${k}" aria-pressed="${c.size === k}">${s.label}<br><small style="font-weight:400">${s.lanes} lanes × ${s.layers} layers</small></button>`).join("")}</div>
+    ${settingsBlock()}</div>
+  <div class="blk"><h2><span><span class="step">2</span>Traffic</span><small>one hour of requests</small></h2>
+    <label class="field"><span>Flight requests in the hour: <b id="cD">${c.D}</b></span><input type="range" id="c-D" min="20" max="2000" step="20" value="${c.D}"></label>
+    <label class="field"><span>Operators sharing the corridor: <b id="cO">${c.ops}</b></span><input type="range" id="c-ops" min="1" max="10" value="${c.ops}"></label>
+    <div class="seg"><button type="button" id="c-1w" aria-pressed="${!c.twoWay}">One-way traffic</button><button type="button" id="c-2w" aria-pressed="${c.twoWay}">Two-way traffic</button></div>
+    ${c.twoWay ? `<div class="seg"><button type="button" id="c-sh" aria-pressed="${!c.separate}">Directions share lanes</button><button type="button" id="c-sep" aria-pressed="${c.separate}">Separate by direction</button></div>` : ""}
+    <div class="seg"><button type="button" id="c-calm" aria-pressed="${!c.windLinks}">Calm air</button><button type="button" id="c-wind" aria-pressed="${c.windLinks}">Forecast wind</button></div>
+    <button class="btn go" type="button" id="c-run">Simulate the hour</button></div>
+  <div class="blk"><h2>Questions to answer</h2>
+    <button class="btn" type="button" id="q-cap">How much traffic can it take?</button>
+    <div class="inrow"><button class="btn" type="button" id="q-size" style="flex:1">What size do we need?</button><label class="field" style="width:96px"><span>target approval</span><select id="q-target">${[80, 90, 95, 99].map((v) => `<option value="${v}"${(S.target || 90) === v ? " selected" : ""}>${v}%</option>`).join("")}</select></label></div>
+    <button class="btn" type="button" id="q-fair">Is access fair between operators?</button></div>`;
+}
+function capDesign() { const z = SIZES[S.cap.size] || SIZES.standard; return Object.assign({}, S.design, { nlat: z.lanes - 1, nh: z.layers }); }
+function wireCap() {
+  const c = S.cap, re = () => { renderLeft(); runCapacity(); };
+  document.querySelectorAll("[data-z]").forEach((b) => b.onclick = () => { c.size = b.dataset.z; const z = SIZES[c.size]; S.design.nlat = z.lanes - 1; S.design.nh = z.layers; refreshCapCorridor(); re(); });
+  $("c-D").oninput = (e) => { $("cD").textContent = e.target.value; }; $("c-D").onchange = (e) => { c.D = +e.target.value; runCapacity(); };
+  $("c-ops").oninput = (e) => { $("cO").textContent = e.target.value; }; $("c-ops").onchange = (e) => { c.ops = +e.target.value; runCapacity(); };
+  $("c-1w").onclick = () => { c.twoWay = false; re(); }; $("c-2w").onclick = () => { c.twoWay = true; re(); };
+  if ($("c-sh")) { $("c-sh").onclick = () => { c.separate = false; re(); }; $("c-sep").onclick = () => { c.separate = true; re(); }; }
+  $("c-calm").onclick = () => { c.windLinks = false; re(); }; $("c-wind").onclick = () => { c.windLinks = true; re(); };
+  $("c-run").onclick = runCapacity; $("q-cap").onclick = () => sweep("demand"); $("q-size").onclick = () => { S.target = +$("q-target").value; sweep("size"); }; $("q-fair").onclick = () => sweep("fair");
+  wireSettings(() => { refreshCapCorridor(); runCapacity(); });
+}
+function refreshCapCorridor() { if (!S.from || !S.to) return; K = buildCorridor(S.from, S.to, S.design); drawCorridor(); }
+function linkTimes(k) { const C = k.C; if (!S.cap.windLinks) return G.linkCosts(C, G.windNone(C), S.veh).t[0]; const W = urbanWind(C, k.F, hourWx(S.hour)); return G.linkCosts(C, G.windFromUrban(C, W), S.veh).t[0]; }
+function runCapacity() {
+  if (!K) return; const c = S.cap, C = K.C; if (!C.origins.length || !C.destinations.length) { $("right").innerHTML = `<div class="blk"><div class="verdict bad">No open take-off pads at one end of this corridor.</div></div>`; return; }
+  const slots = Math.round(3600 / c.slot), trips = G.demand(C, c.D, { operators: c.ops, window: slots, forward_share: c.twoWay ? 0.5 : 1, seed: 1001 });
+  const H = Math.ceil((3600 + 2 * 1.2 * C.L * FT / (S.veh.cruise_mph * 5280 / 3600) + 300) / c.slot), t0 = performance.now(), res = G.sire(C, linkTimes(K), trips, { slot: c.slot, H, rule: c.separate && c.twoWay ? "directed" : "undirected", groundTransit: false });
+  const k = G.kpis(trips, res); S.capRun = { trips, res, k, ms: performance.now() - t0, slot: c.slot };
+  if (!S.plan || !S.plan.W) { S.plan = planRoute(K, S.hour, S.priority); if (!S.plan.error) S.windAlt = 300; }
+  drawFleet(); rightCap();
+}
+function drawFleet() {
+  const g = group("routes"), R = S.capRun, acc = R.res.map((r, i) => r.ok ? i : -1).filter((i) => i >= 0), s = Math.max(2.5, Math.min(6, K.C.L / 500));
+  const geo = new THREE.BoxGeometry(5 * s, 0.9 * s, 5 * s), mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, acc.length));
+  acc.forEach((i, j) => mesh.setColorAt(j, col(OPS[(R.trips[i].op - 1) % 10]))); if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.add(mesh);
+  R.mesh = mesh; R.acc = acc; R.rings = [...K.C.origins, ...K.C.destinations].map((n) => { const ok = new THREE.Mesh(new THREE.RingGeometry(9, 14, 28), new THREE.MeshBasicMaterial({ color: col("--good"), transparent: true, opacity: 0, side: THREE.DoubleSide })), bad = new THREE.Mesh(new THREE.RingGeometry(15, 21, 28), new THREE.MeshBasicMaterial({ color: col("--bad"), transparent: true, opacity: 0, side: THREE.DoubleSide }));
+    for (const m of [ok, bad]) { m.rotation.x = -Math.PI / 2; m.position.copy(nodeV(n)); m.position.y = 1.5; g.add(m); } return { n, ok, bad }; });
+  S.anim.tmax = Math.max(3600, ...acc.map((i) => R.res[i].legs.slice(-1)[0][2] * R.slot)); S.anim.rate = S.anim.tmax / 60; S.anim.t = 0; S.anim.playing = !REDUCED;
+}
+function fleetFrame() {
+  const R = S.capRun; if (!R || !R.mesh) return; const t = S.anim.t, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), UP = new THREE.Vector3(0, 1, 0), hide = new THREE.Vector3(0, -9999, 0); let air = 0;
+  R.acc.forEach((i, j) => { const lg = R.res[i].legs; let p = hide; if (t >= lg[0][1] * R.slot && t <= lg[lg.length - 1][2] * R.slot) { let L0 = lg[0]; for (const l of lg) if (l[1] * R.slot <= t) L0 = l; const f = Math.min(1, (t - L0[1] * R.slot) / ((L0[2] - L0[1]) * R.slot)), a = nodeV(K.C.af[L0[0]], 4), b = nodeV(K.C.at[L0[0]], 4); p = a.clone().lerp(b, f); const d = b.clone().sub(a); Q.setFromAxisAngle(UP, Math.atan2(-d.z, d.x)); air++; } M.compose(p, Q, one); R.mesh.setMatrixAt(j, M); });
+  R.mesh.instanceMatrix.needsUpdate = true; let sub = 0, ok = 0; const okA = {}, badA = {};
+  R.trips.forEach((tr, i) => { const td = tr.dispatch * R.slot; if (td <= t) { sub++; if (R.res[i].ok) ok++; const age = (t - td) / Math.max(30, S.anim.rate * 2); if (age < 1) { const m = R.res[i].ok ? okA : badA; m[tr.o] = Math.max(m[tr.o] || 0, 1 - age); } } });
+  R.rings.forEach((r) => { r.ok.material.opacity = (okA[r.n] || 0) * 0.9; r.bad.material.opacity = (badA[r.n] || 0) * 0.9; });
+  const el = $("liveCap"); if (el) el.innerHTML = `<b>${Math.floor(t / 60)} min</b> · ${sub} requested · <span style="color:var(--good)">${ok} approved</span> · <span style="color:var(--bad)">${sub - ok} denied</span> · ${air} in the air`;
+}
+function rightCap() {
+  const R = S.capRun, k = R.k, c = S.cap, fair = k.gini < 0.05 ? "Fair" : k.gini < 0.2 ? "Somewhat uneven" : "Uneven";
+  const z = SIZES[c.size]; $("right").innerHTML = `<div class="blk"><h2>One hour on this corridor <small>${z.label} · ${z.lanes} lanes × ${z.layers} layers</small></h2>
+    <div class="answer"><div class="metric hero"><div class="k">Requests approved</div><div class="v">${fmt(100 * k.sr, 0)}<small>%</small></div><div class="d">${k.accepted} of ${k.demand} flights got a reserved route</div></div>
+      <div class="metric"><div class="k">Average flight</div><div class="v">${fmt(k.tt / 60, 1)} <small>min</small></div><div class="d">for approved flights</div></div>
+      <div class="metric"><div class="k">Operator access</div><div class="v" style="font-size:18px">${fair}</div><div class="d">Gini ${fmt(k.gini, 2)}</div></div></div>
+    <p class="note" id="liveCap"></p>
+    <div class="verdict ${k.sr >= 0.9 ? "good" : k.sr < 0.6 ? "bad" : ""}">${k.sr >= 0.9 ? "The corridor handles this traffic." : k.sr >= 0.6 ? "Some operators will be turned away at busy moments." : "The corridor is saturated: most requests are denied. Try a larger size, two-way separation, or fewer requests."} Denied requests never enter the corridor, so approved flights stay on time.</div></div>
+  <div class="blk"><h2>Approvals by operator</h2><canvas class="chart" id="opc" style="height:120px"></canvas><button class="btn" type="button" id="csvCap">Download CSV</button></div>
+  <div class="blk" id="extra"></div>`;
+  chart($("opc"), k.opSR.map((v, i) => ({ c: OPS[i % 10], bars: true, pts: [[i, 100 * v]] })), { ylab: "% approved", ymin: 0, ymax: 100, xmin: -0.6, xmax: k.opSR.length - 0.4, xticks: k.opSR.map((_, i) => [i, `Op ${i + 1}`]) });
+  $("csvCap").onclick = () => saveCSV("corridoriq_capacity_run.csv", [["trip", "operator", "origin_node", "destination_node", "request_min", "approved", "flight_min"]].concat(R.trips.map((t, i) => [t.id, t.op, t.o, t.d, (t.dispatch * R.slot / 60).toFixed(2), R.res[i].ok ? 1 : 0, R.res[i].ok ? (R.res[i].travel / 60).toFixed(2) : ""])));
+}
+let worker = null;
+const WORKER = `self.onmessage = (e) => { const G = self.LabEngine, j = e.data, FT = G.FT, out = [];
+  const run = (spec, p, seed) => { const C = G.buildCorridor(spec, j.blds); if (!C.origins.length || !C.destinations.length) return null;
+    const veh = { cruise_mph: j.cruise, energy_j_per_ft: 20.42 }; const tau = Array.from(C.len, (L) => L * FT / (j.cruise * 5280 / 3600));
+    const trips = G.demand(C, p.D, { operators: p.ops, window: Math.round(3600 / p.slot), forward_share: p.share, seed });
+    const k = G.kpis(trips, G.sire(C, tau, trips, { slot: p.slot, H: p.H || Math.ceil((3600 + 2 * 1.2 * C.L * FT / (j.cruise * 5280 / 3600) + 300) / p.slot), rule: p.rule, groundTransit: j.gt, tieBreak: p.tie })); return k; };
+  const cells = j.cells; cells.forEach((c, i) => { const reps = c.reps || 1; let k = null; for (let r = 0; r < reps; r++) { const x = run(c.spec, c.p, 1001 + r); if (!x) break; k = k ? { sr: k.sr + x.sr / reps, accepted: k.accepted + x.accepted / reps, gini: k.gini + x.gini / reps, tt: k.tt + x.tt / reps } : { sr: x.sr / reps, accepted: x.accepted / reps, gini: x.gini / reps, tt: x.tt / reps, opSR: x.opSR }; } out.push(Object.assign({ key: c.key }, k || { nopad: true })); self.postMessage({ progress: (i + 1) / cells.length }); });
+  self.postMessage({ result: out }); };`;
+function runWorker(cells, opts, onDone, bar) {
+  if (!worker) worker = new Worker(URL.createObjectURL(new Blob([ENGINE_SRC + "\n" + WORKER], { type: "text/javascript" })));
+  worker.onmessage = (e) => { if (e.data.progress != null) { if ($(bar)) $(bar).style.width = `${100 * e.data.progress}%`; return; } onDone(e.data.result); const ex = $("extra"); if (ex) ex.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "nearest" }); };
+  worker.postMessage(Object.assign({ cells, cruise: S.veh.cruise_mph, gt: false }, opts));
+}
+function baseP() { const c = S.cap; return { D: c.D, ops: c.ops, share: c.twoWay ? 0.5 : 1, rule: c.separate && c.twoWay ? "directed" : "undirected", slot: c.slot, tie: "operator" }; }
+function sweep(kind) {
+  if (!K) return; const ex = $("extra") || (rightCap(), $("extra")); ex.innerHTML = `<h2>Working…</h2><div class="prog"><i id="sw-bar"></i></div>`; const spec = specFor(K.F, capDesign()), p = baseP();
+  if (kind === "demand") { const Ds = [50, 100, 200, 300, 400, 600, 800, 1000, 1400, 2000];
+    runWorker(Ds.map((D) => ({ key: D, spec, p: Object.assign({}, p, { D }) })), { blds: K.blds }, (R) => {
+      const pts = R.filter((r) => !r.nopad).map((r) => [r.key, 100 * r.sr]); let cap90 = null; for (let i = 1; i < pts.length; i++) if (pts[i - 1][1] >= 90 && pts[i][1] < 90) cap90 = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * (pts[i - 1][1] - 90) / (pts[i - 1][1] - pts[i][1]);
+      const thr = R.filter((r) => !r.nopad).map((r) => [r.key, r.accepted]);
+      ex.innerHTML = `<h2>How much traffic can it take? <small>${SIZES[S.cap.size].label} corridor</small></h2><canvas class="chart" id="sw1"></canvas><canvas class="chart" id="sw2" style="height:120px"></canvas>
+        <div class="verdict ${cap90 ? "good" : ""}">${cap90 ? `About <b>${Math.round(cap90)} flight requests per hour</b> can be served with 90% approval. Beyond that, approved flights level off at ~${Math.round(Math.max(...thr.map((t) => t[1])))} per hour and extra requests are denied.` : pts.length && pts[pts.length - 1][1] >= 90 ? "Even 2,000 requests an hour are served with 90% approval." : "Approval is below 90% at every tested demand."}</div>
+        <button class="btn" type="button" id="csvSw">Download CSV</button>`;
+      chart($("sw1"), [{ c: "--brand", pts, dots: true }], { ylab: "% approved", xlab: "requests / hour", ymin: 0, ymax: 100 });
+      chart($("sw2"), [{ c: "--good", pts: thr, dots: true }], { ylab: "approved flights", xlab: "requests / hour", ymin: 0 });
+      $("csvSw").onclick = () => saveCSV("corridoriq_capacity_curve.csv", [["requests_per_hour", "approval_pct", "approved_flights", "gini"]].concat(R.filter((r) => !r.nopad).map((r) => [r.key, (100 * r.sr).toFixed(1), r.accepted, r.gini.toFixed(3)])));
+    }, "sw-bar"); }
+  if (kind === "size") { const cells = []; for (const lanes of [2, 3, 4, 5, 6, 8]) for (const layers of [1, 2, 3, 4]) cells.push({ key: [lanes, layers], spec: specFor(K.F, Object.assign({}, S.design, { nlat: lanes - 1, nh: layers })), p });
+    runWorker(cells, { blds: K.blds }, (R) => { const t = S.target / 100, ok = R.filter((r) => !r.nopad && r.sr >= t).sort((a, b) => a.key[0] * a.key[1] - b.key[0] * b.key[1] || b.sr - a.sr), best = ok[0], L = [2, 3, 4, 5, 6, 8], Y = [1, 2, 3, 4], get = (a, b) => R.find((r) => r.key[0] === a && r.key[1] === b);
+      ex.innerHTML = `<h2>What size do we need? <small>${S.cap.D} requests / hour</small></h2>
+        <div class="tw"><table><thead><tr><th>Lanes \\ layers</th>${Y.map((y) => `<th>${y}</th>`).join("")}</tr></thead><tbody>${L.map((l) => `<tr><td>${l} lanes</td>${Y.map((y) => { const r = get(l, y); return r.nopad ? `<td class="m" title="no open take-off pad">–</td>` : r.accepted === 0 ? `<td class="m" style="color:var(--ink-3)" title="buildings block every path">blocked</td>` : `<td class="m" style="background:color-mix(in srgb, var(--brand) ${Math.round(r.sr * 55)}%, transparent);${best === r ? "outline:2px solid var(--good);outline-offset:-2px" : ""}">${fmt(100 * r.sr, 0)}%</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+        <p class="note">– no open take-off pad · blocked: tall buildings cut every path at that size.</p><div class="verdict ${best ? "good" : "bad"}">${best ? `Smallest corridor that approves at least ${S.target}% of requests: <b>${best.key[0]} lanes × ${best.key[1]} altitude layers</b> (${fmt(100 * best.sr, 0)}%). ` : `No tested size reaches ${S.target}% at this demand. Spread requests over more time, separate directions, or open a parallel corridor.`}</div>
+        ${best ? `<button class="btn" type="button" id="apply">Use ${best.key[0]} lanes × ${best.key[1]} layers</button>` : ""}<button class="btn" type="button" id="csvSz">Download CSV</button>`;
+      if (best) $("apply").onclick = () => { S.design.nlat = best.key[0] - 1; S.design.nh = best.key[1]; S.cap.size = "custom"; SIZES.custom = { label: "Custom", lanes: best.key[0], layers: best.key[1] }; renderLeft(); refreshCapCorridor(); runCapacity(); };
+      $("csvSz").onclick = () => saveCSV("corridoriq_corridor_size.csv", [["lanes", "layers", "approval_pct", "approved_flights"]].concat(R.filter((r) => !r.nopad).map((r) => [r.key[0], r.key[1], (100 * r.sr).toFixed(1), r.accepted])));
+    }, "sw-bar"); }
+  if (kind === "fair") { const cells = ["operator", "random", "rotating"].map((tie) => ({ key: tie, spec, p: Object.assign({}, p, { tie }) }));
+    runWorker(cells, { blds: K.blds }, (R) => { const lab = { operator: "First in line by operator ID (today's rule)", random: "Lottery within the same minute", rotating: "Rotating priority" };
+      ex.innerHTML = `<h2>Is access fair? <small>${S.cap.ops} operators</small></h2><div class="tw"><table><thead><tr><th>Rule</th><th>Approved</th><th>Fairness</th></tr></thead><tbody>${R.map((r) => `<tr><td>${lab[r.key]}</td><td class="m">${fmt(100 * r.sr, 0)}%</td><td class="m">${r.gini < 0.05 ? "Fair" : r.gini < 0.2 ? "Uneven" : "Very uneven"} (${fmt(r.gini, 2)})</td></tr>`).join("")}</tbody></table></div>
+        <div class="verdict">When the corridor is busy, the order in which same-minute requests are handled decides who flies. A lottery or rotating priority keeps the same total traffic but shares it fairly.</div>`;
+    }, "sw-bar"); }
+}
+
+// ===================================================================== DISPATCH screen (Paper 3, Python ILP replays)
+const DM = ["fcfs", "ilp", "offline"], DML = { fcfs: "First come, first served", ilp: "CorridorIQ optimizer", offline: "Perfect hindsight (benchmark)" }, PRC = { normal: "--op1", high: "--op2", emergency: "--op8" };
+function leftDisp() { return `<div class="blk"><h2>Dispatch board</h2><p class="note">Flight requests arrive over time with a priority (normal, high, emergency). Every minute the optimizer decides who departs when and which path each flight takes, and locks in flights about to leave. Compare it with first come, first served.</p>
+  <label class="field"><span>Scenario</span><select id="d-case">${DATA.rh.cases.map((c, i) => `<option value="${i}"${S.disp.c === i ? " selected" : ""}>${esc(c.label)}</option>`).join("")}</select></label>
+  <div class="seg">${DM.map((m, i) => `<button type="button" data-dm="${i}" aria-pressed="${S.disp.m === i}">${["First come", "Optimizer", "Hindsight"][i]}</button>`).join("")}</div>
+  <button class="btn go" type="button" id="d-play">Replay the hour</button></div>`; }
+function wireDisp() { $("d-case").onchange = (e) => { S.disp.c = +e.target.value; loadDisp(); }; document.querySelectorAll("[data-dm]").forEach((b) => b.onclick = () => { S.disp.m = +b.dataset.dm; renderLeft(); loadDisp(); }); $("d-play").onclick = () => { S.anim.t = 0; S.anim.playing = true; }; }
+let DK = null;
+function loadDisp() {
+  const c = DATA.rh.cases[S.disp.c], cfg = c.config, base = K ? G.toEN(K.F, 0, 0) : [0, 0], bear = K ? K.F.b : 0, F2 = { s: base, b: bear }, half = cfg.ny * cfg.width_ft / 2;
+  DK = { c, F: F2, pos: c.corridor.pos.map((p) => [p[0] / FT, (p[1] - half) / FT, p[2] / FT]) };
+  const V2 = (n, l = 0) => { const p = DK.pos[n], e = G.toEN(F2, p[0], p[1]); return V(e[0], e[1], Math.max(p[2], 1) + l); }; DK.V = V2;
+  group("corr"); group("net"); const g = group("routes"), v = []; for (const [a, b] of c.corridor.edges) { const p = V2(a), q = V2(b); v.push(p.x, p.y, p.z, q.x, q.y, q.z); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.45 })));
+  const M = c.methods[DM[S.disp.m]]; DK.dr = M.plans.map((p) => { const d = makeDrone(PRC[p.prio], 2.4); d.visible = false; g.add(d); return { d, p }; });
+  const last = Math.max(...c.requests.map((r) => r.latest), ...M.plans.map((p) => p.times[p.times.length - 1])); S.anim.tmax = (last + 5) * cfg.dt_min * 60; S.anim.rate = S.anim.tmax / 45; S.anim.t = 0; S.anim.playing = !REDUCED;
+  const mid = V2(Math.floor(DK.pos.length / 2)); controls.target.copy(mid); const bk = G.toEN(F2, -250, -480); camera.position.copy(V(bk[0], bk[1], 300)); sunFor(mid, 800);
+  const kp = (m) => c.methods[m].kpis;
+  $("right").innerHTML = `<div class="blk"><h2>${esc(c.label)}</h2><div class="tw"><table><thead><tr><th>Method</th><th>Served</th><th>Emerg.</th><th>Avg wait</th><th>Max</th></tr></thead><tbody>${DM.map((m, i) => `<tr class="click${i === S.disp.m ? " sel" : ""}" data-dm2="${i}"><td>${["First come", "Optimizer", "Hindsight"][i]}</td><td class="m">${kp(m).served}/${c.requests.length}</td><td class="m">${fmt(100 * kp(m).emergency_service_rate, 0)}%</td><td class="m">${fmt(kp(m).mean_delay * 60, 0)} s</td><td class="m">${fmt(kp(m).max_delay, 1)} min</td></tr>`).join("")}</tbody></table></div>
+    <div class="verdict">${kp("ilp").mean_delay < kp("fcfs").mean_delay - 1e-9 ? `The optimizer cuts the average ground wait from ${fmt(kp("fcfs").mean_delay * 60, 0)} s to ${fmt(kp("ilp").mean_delay * 60, 0)} s` : "The optimizer matches first come, first served on waiting"}${kp("ilp").weighted_service_rate > kp("fcfs").weighted_service_rate + 1e-9 ? ` and serves more high-priority flights` : ""}; it reaches the hindsight benchmark's ${fmt(100 * kp("offline").weighted_service_rate, 0)}% priority-weighted service ${kp("ilp").weighted_service_rate >= kp("offline").weighted_service_rate - 1e-9 ? "exactly" : `within ${fmt(100 * (kp("offline").weighted_service_rate - kp("ilp").weighted_service_rate), 1)} points`}.</div></div>
+  <div class="blk"><h2>Requests over time <small>${DML[DM[S.disp.m]]}</small></h2><canvas class="chart" id="board" style="height:260px"></canvas>
+    <p class="note">Grey bar: when a flight may leave. Colored bar: its scheduled flight (blue normal, orange high, red emergency). Shaded band: decisions locked now (dark) and being planned (light).</p>
+    <button class="btn" type="button" id="csvD">Download CSV</button></div>`;
+  document.querySelectorAll("[data-dm2]").forEach((tr) => tr.onclick = () => { S.disp.m = +tr.dataset.dm2; renderLeft(); loadDisp(); });
+  $("csvD").onclick = () => saveCSV("corridoriq_dispatch.csv", [["request", "priority", "operator", "departure_min", "arrival_min", "wait_min", "method"]].concat(M.plans.map((p) => [p.rid, p.prio, p.op, (p.times[0] * cfg.dt_min).toFixed(2), (p.times[p.times.length - 1] * cfg.dt_min).toFixed(2), p.delay, DM[S.disp.m]])));
+}
+function dispFrame(dt) {
+  if (!DK) return; const c = DK.c, cfg = c.config, s = S.anim.t / 60 / cfg.dt_min, m = S.disp.m;
+  for (const { d, p } of DK.dr) { const T = p.times; if (!(m === 2 || p.commit <= s) || s < T[0] || s > T[T.length - 1]) { d.visible = false; continue; } let i = 0; while (i < T.length - 2 && T[i + 1] < s) i++; const f = (s - T[i]) / ((T[i + 1] - T[i]) || 1), a = DK.V(p.path[i], 4), b = DK.V(p.path[i + 1], 4); d.visible = true; d.position.copy(a.clone().lerp(b, f)); if (!REDUCED) d.rotors.forEach((r, k) => r.rotation.y += (k % 2 ? 1 : -1) * dt * 45); }
+  const cv = $("board"); if (!cv) return; const R = c.requests.slice().sort((a, b) => a.pref - b.pref), tm = S.anim.tmax / 60, by = {}, now = S.anim.t / 60; c.methods[DM[m]].plans.forEach((p) => { by[p.rid] = p; });
+  const ch = chart(cv, [], { xmin: 0, xmax: tm, ymin: 0, ymax: R.length, xlab: "minutes", ylab: "requests", vline: now }) || chart(cv, [{ c: "--rule", w: 0.01, pts: [[0, 0], [tm, R.length]] }], { xmin: 0, xmax: tm, ymin: 0, ymax: R.length, xlab: "minutes", ylab: "requests", vline: now }); if (!ch) return;
+  const x = cv.getContext("2d"), rh = Math.max(1, ch.Y(0) - ch.Y(1) - 0.6);
+  if (m !== 2) { const roll = Math.floor(now / cfg.roll_min) * cfg.roll_min; x.fillStyle = css("--brand"); x.globalAlpha = 0.07; x.fillRect(ch.X(roll), ch.Y(R.length), ch.X(roll + cfg.horizon_min) - ch.X(roll), ch.Y(0) - ch.Y(R.length)); x.globalAlpha = 0.16; x.fillRect(ch.X(roll), ch.Y(R.length), ch.X(roll + cfg.freeze_min) - ch.X(roll), ch.Y(0) - ch.Y(R.length)); x.globalAlpha = 1; }
+  R.forEach((r, i) => { const y = ch.Y(i + 1); x.globalAlpha = r.reveal * cfg.dt_min > now ? 0.15 : 0.45; x.fillStyle = css("--ink-3"); x.fillRect(ch.X(r.pref * cfg.dt_min), y, Math.max(1, ch.X(r.latest * cfg.dt_min) - ch.X(r.pref * cfg.dt_min)), rh); x.globalAlpha = 1;
+    const p = by[r.rid]; if (p && (m === 2 || p.commit * cfg.dt_min <= now)) { x.fillStyle = css(PRC[r.prio]); x.fillRect(ch.X(p.times[0] * cfg.dt_min), y, Math.max(2, ch.X(p.times[p.times.length - 1] * cfg.dt_min) - ch.X(p.times[0] * cfg.dt_min)), rh); } });
+}
+
+// ===================================================================== VALIDATION screen (reproduce the papers)
+function leftVal() { return `<div class="blk"><h2>Validation</h2><p class="note">Re-runs the published experiments with the same engine the app uses, on the papers' own corridor geometry (open field), and puts the published numbers next to the app's.</p>
+  <button class="btn" type="button" data-v="t1">Wind-aware routing · Table 1 (wind direction)</button>
+  <button class="btn" type="button" data-v="f7">Wind-aware routing · Figure 7 (departure time)</button>
+  <button class="btn" type="button" data-v="e1">Shared corridor · Figure 1 (demand)</button>
+  <button class="btn" type="button" data-v="e3">Shared corridor · Figure 3 (two-way traffic)</button>
+  <p class="note">Rolling-horizon schedules are validated by the Python audit (no shared link-time slot, request windows, freeze rule); see the Dispatch screen.</p></div>`; }
+function wireVal() { document.querySelectorAll("[data-v]").forEach((b) => b.onclick = () => validate(b.dataset.v)); }
+function validate(kind) {
+  const trr = G.buildCorridor({ L: 30000 / FT, module_length: 6000 / FT, module_width: 100 / FT, n_lat: 2, z_levels: [0, 200, 300, 400].map((z) => z / FT), vertical_ground_only: false }, null);
+  const veh = { cruise_mph: 35, energy_j_per_ft: 20.42, phase_dependent: false }, o = trr.node(0, 0, 0), d = trr.node(5, 0, 0), ref = DATA.ref;
+  const cell = (v, r, dd) => { const ok = r != null && Math.abs(v - r) <= Math.max(0.02 * Math.abs(r), 1.5 * 10 ** -dd); return `<td class="m ${r == null ? "" : ok ? "ok" : "off"}">${fmt(v, dd)}${r != null ? ` <span style="color:var(--ink-3)">/ ${r}</span>` : ""}</td>`; };
+  if (kind === "t1") { const rows = ["none", 0, 45, 90, 135, 180, 225, 270, 315].map((dir) => { const w = dir === "none" ? G.windNone(trr) : G.windShear(trr, dir), R = G.pareto(trr, G.linkCosts(trr, w, veh), w, veh, o, d).routes;
+      return { dir, T: R.reduce((a, r) => a + r.time, 0) / R.length / 60, E: R.reduce((a, r) => a + r.energy, 0) / R.length / 3.6e6, n: R.length, r: ref.trr.t1[String(dir)] }; });
+    $("right").innerHTML = `<div class="blk"><h2>Table 1 · wind direction <small>app / published</small></h2><div class="tw"><table><thead><tr><th>Wind toward</th><th>Minutes</th><th>kWh</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${r.dir === "none" ? "calm" : r.dir + "°"}</td>${cell(r.T, r.r[0], 2)}${cell(r.E, r.r[1], 3)}</tr>`).join("")}</tbody></table></div><p class="note">Average over the time–energy trade-off routes, 30,000 ft corridor, 35 mph, wind 10–30 mph rising with altitude. Green: within 2% of the published value. 45° and 315° are mirror images in the model, so the app gives the same value for both; the paper lists 6.30 and 6.38 min.</p></div>`; }
+  if (kind === "f7") { const ser = []; for (const [dir, tr, c] of [[0, "calm_to_strong", "--aware"], [0, "strong_to_calm", "--good"], [180, "calm_to_strong", "--bad"], [180, "strong_to_calm", "--naive"]]) { const w = G.windTemporal(trr, dir, tr), ct = G.linkCosts(trr, w, veh); ser.push({ c, dash: dir === 180, dots: true, pts: [...Array(10).keys()].map((k) => { const R = G.pareto(trr, ct, w, veh, o, d, { depart: 180 * k }).routes; return [3 * k, R.reduce((a, r) => a + r.time, 0) / R.length / 60]; }) }); }
+    $("right").innerHTML = `<div class="blk"><h2>Figure 7 · when to depart</h2><canvas class="chart" id="vf7" style="height:200px"></canvas><p class="note">Solid: tailwind (blue calm→strong, green strong→calm). Dashed: headwind (red calm→strong, orange strong→calm). Published: tailwind calm→strong falls from ~8–9 to just over 6 min; headwind calm→strong rises above 25 min.</p></div>`;
+    chart($("vf7"), ser, { ylab: "minutes", xlab: "departure (min)" }); }
+  if (kind === "e1" || kind === "e3") {
+    const trb = { L: 30000 / FT, module_length: 1000 / FT, module_width: 200 / FT, n_lat: 2, z_levels: [0, 100, 200, 300, 400].map((z) => z / FT), vertical_ground_only: false };
+    $("right").innerHTML = `<div class="blk"><h2>Running…</h2><div class="prog"><i id="v-bar"></i></div></div>`;
+    const cells = kind === "e1" ? [200, 400, 600, 800, 1000, 2000].map((D) => ({ key: D, reps: 3, spec: trb, p: { D, ops: 3, share: 1, rule: "undirected", slot: 60, tie: "operator", H: 120 } }))
+      : [1, 0.75, 0.5, 0.25].flatMap((f) => ["undirected", "directed"].map((rule) => ({ key: [f, rule], spec: trb, p: { D: 2000, ops: 3, share: f, rule, slot: 60, tie: "operator", H: 120 } })));
+    if (!worker) worker = new Worker(URL.createObjectURL(new Blob([ENGINE_SRC + "\n" + WORKER], { type: "text/javascript" })));
+    worker.onmessage = (e) => { if (e.data.progress != null) { if ($("v-bar")) $("v-bar").style.width = `${100 * e.data.progress}%`; return; } const R = e.data.result;
+      if (kind === "e1") $("right").innerHTML = `<div class="blk"><h2>Figure 1 · success rate vs demand <small>app (3 runs) / published (30 runs)</small></h2><div class="tw"><table><thead><tr><th>Requests</th><th>Success rate %</th><th>Accepted</th></tr></thead><tbody>${R.map((r) => `<tr><td>${r.key}</td>${cell(100 * r.sr, ref.trb.sr[r.key] ? +(100 * ref.trb.sr[r.key]).toFixed(1) : null, 1)}<td class="m">${Math.round(r.accepted)}</td></tr>`).join("")}</tbody></table></div><p class="note">30,000 ft corridor of 1,000 × 200 × 100 ft blocks, 3 operators, requests spread over 60 minutes, 2-hour completion horizon. The app averages 3 random demand draws and the paper 30, so expect differences of about 1–2 points.</p></div>`;
+      else $("right").innerHTML = `<div class="blk"><h2>Figure 3 · two-way traffic <small>2,000 requests</small></h2><div class="tw"><table><thead><tr><th>Forward/reverse</th><th>Shared %</th><th>Separated %</th></tr></thead><tbody>${[1, 0.75, 0.5, 0.25].map((f) => { const a = R.find((r) => r.key[0] === f && r.key[1] === "undirected"), b = R.find((r) => r.key[0] === f && r.key[1] === "directed"), p = ref.trb.dir[String(f)]; return `<tr><td>${f * 100}/${100 - f * 100}</td>${cell(100 * a.sr, p[0], 1)}${cell(100 * b.sr, p[1], 1)}</tr>`; }).join("")}</tbody></table></div></div>`; };
+    worker.postMessage({ cells, cruise: 35, gt: true, blds: null });
+  }
+}
+
+// ===================================================================== screens, picking, area import, loop
+function renderLeft() { const s = S.screen; $("left").innerHTML = s === "plan" ? leftPlan() : s === "cap" ? leftCap() : s === "disp" ? leftDisp() : leftVal(); if (s === "plan") wirePlan(); else if (s === "cap") wireCap(); else if (s === "disp") wireDisp(); else wireVal(); }
+function go(s) {
+  S.screen = s; document.querySelectorAll("#screens button").forEach((b) => b.setAttribute("aria-selected", b.dataset.s === s)); renderLeft(); group("routes"); $("right").innerHTML = "";
+  if (s === "plan") { if (K) { drawCorridor(); frameView(); runPlan(); } }
+  else if (s === "cap") { if (S.cap.size !== "custom") { const z = SIZES[S.cap.size]; S.design.nlat = z.lanes - 1; S.design.nh = z.layers; } refreshCapCorridor(); if (K) { frameView(); runCapacity(); } }
+  else if (s === "disp") loadDisp();
+  else { group("corr"); group("net"); $("right").innerHTML = `<div class="blk"><h2>Pick an experiment</h2><p class="note">Each one re-runs a published experiment and shows the published value next to the app's.</p></div>`; }
+}
+document.querySelectorAll("#screens button").forEach((b) => b.onclick = () => go(b.dataset.s));
+let picking = null; const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+function startPick(which) { picking = which; renderer.domElement.classList.add("picking"); toast(`Click the map to set ${which === "from" ? "From" : "To"}.`); }
+renderer.domElement.addEventListener("click", (e) => { if (!picking) return; mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(mouse, camera); const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(plane, p)) return;
+  const en = [p.x, -p.z], near = P.reduce((b, q) => { const d = Math.hypot(q.e[0] - en[0], q.e[1] - en[1]); return d < b[1] ? [q, d] : b; }, [null, 80]);
+  S[picking] = near[0] || { n: `Pad at ${Math.round(en[0])}, ${Math.round(en[1])}`, e: en, k: "pad" }; picking = null; renderer.domElement.classList.remove("picking"); renderLeft(); refreshCorridor(); });
+$("osmfile").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; toast(`Reading ${f.name}…`);
+  try { const c = G.parseOSM(await f.text()); if (!c.buildings.length) throw new Error("no buildings found"); const doc = new DOMParser().parseFromString(await f.text(), "application/xml"), kx = 111132 * Math.cos(c.origin[0] * Math.PI / 180), places = [];
+    doc.querySelectorAll("node").forEach((n) => { const t = {}; n.querySelectorAll("tag").forEach((x) => t[x.getAttribute("k")] = x.getAttribute("v")); if (t.name && (t.amenity || t.tourism || t.leisure || t.shop || t.office || t.building)) places.push({ n: t.name, k: "place", e: [(+n.getAttribute("lon") - c.origin[1]) * kx, (+n.getAttribute("lat") - c.origin[0]) * 111132] }); });
+    c.buildings.forEach((b) => { if (b.name) places.push({ n: b.name, e: [b.p[0], b.p[1]] }); });
+    S.city = { name: f.name.replace(/\.(osm|xml)$/i, ""), origin: c.origin, buildings: c.buildings.map((b) => ({ p: b.p, h: b.h, k: "yes" })), roads: c.roads.map((r) => ({ p: r.p, w: r.M ? 15 : 9, M: r.M })), areas: [], trees: [], places };
+    P.length = 0; places.forEach((p) => P.push(p)); S.from = S.to = null; K = null; S.routes = []; S.wcache = {}; drawCity(); updateArea();
+    const xs = c.buildings.flatMap((b) => [b.p[0]]), ys = c.buildings.flatMap((b) => [b.p[1]]); controls.target.set((Math.min(...xs) + Math.max(...xs)) / 2, 20, -(Math.min(...ys) + Math.max(...ys)) / 2); camera.position.copy(controls.target.clone().add(new THREE.Vector3(-600, 900, 900)));
+    go("plan"); toast(`${c.buildings.length} buildings loaded. Search a place or click the map for From and To.`);
+  } catch (err) { toast(`Could not read that file: ${err.message}`); } };
+function updateArea() { $("areaname").textContent = S.city.name; $("areainfo").textContent = `${S.city.buildings.length.toLocaleString()} buildings · ${P.length} places`; }
+$("m-net").onclick = () => { S.net = !S.net; $("m-net").setAttribute("aria-pressed", S.net); if (groups.net) groups.net.visible = S.net; };
+$("m-follow").onclick = () => { S.follow = !S.follow; $("m-follow").setAttribute("aria-pressed", S.follow); if (!S.follow && K) frameView(); };
+$("m-home").onclick = () => { S.follow = false; $("m-follow").setAttribute("aria-pressed", false); if (K) frameView(); };
+let last = performance.now();
+function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; controls.update();
+  if (S.anim.playing) { S.anim.t += dt * S.anim.rate; if (S.anim.t >= S.anim.tmax) { S.anim.t = S.anim.tmax; S.anim.playing = false; } }
+  if (S.screen === "plan") flyFrame(dt); else if (S.screen === "cap") fleetFrame(); else if (S.screen === "disp") dispFrame(dt);
+  particles(REDUCED ? 0 : dt); renderer.render(scene, camera); pins(); requestAnimationFrame(loop); }
+const retheme = () => { drawCity(); if (K) drawCorridor(); if (S.screen === "plan" && S.plan) drawPlan(); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+requestAnimationFrame(loop);
+drawCity(); initParticles(); updateArea();
+const pick = (n) => P.find((p) => p.n === n);
+S.from = pick("The Shed") || P[0]; if (S.from.n === "The Shed") S.from = Object.assign({}, S.from, { n: "Farmers Market (The Shed)" }); S.to = pick("American Airlines Center") || P[P.length - 1];
+S.routes = [{ from: S.from, to: S.to }]; const extra = [["Dallas Union Station", "Dallas City Hall"], ["The Sixth Floor Museum at Dealey Plaza", "Meyerson Symphony Center"]];
+for (const [a, b] of extra) if (pick(a) && pick(b)) S.routes.push({ from: pick(a), to: pick(b) }); S.active = 0;
+go("plan"); refreshCorridor();
+})();
+</script>

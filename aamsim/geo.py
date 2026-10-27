@@ -78,6 +78,7 @@ class Building:
     base: float = 0.0
     measured: bool = False  # height came from a tag, not a default
     osm_id: str = ""
+    kind: str = "yes"       # OSM building=* value
 
 
 @dataclass
@@ -141,7 +142,7 @@ def load_buildings(path, origin=None, name="city") -> City:
         h, base, measured = _parse_height(tags)
         if h - base < 2.0:
             continue
-        b = Building(xy, h, base, measured, wid)
+        b = Building(xy, h, base, measured, wid, tags.get("building", tags.get("building:part", "yes")))
         (part_polys if (wid, tags, refs) in parts else city.buildings).append(b)
     if part_polys:
         # drop an outline if a part's centroid lies inside it and the outline has no measured height

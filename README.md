@@ -18,7 +18,26 @@ All four run on **one shared core**: the same modular corridor lattice, wind fie
    building-aware wind is computed around the real footprints, and missions are planned with the four planning winds and flown in
    the true wind, exactly as in GeoWind2Plan; many-operator SIRE traffic runs on the same city corridor.
 
-**AAM Corridor Lab — `demo/lab.html` (main interactive tool).** One page per paper, on any OpenStreetMap area:
+## CorridorIQ — the product app (`demo/corridoriq.html`)
+
+CorridorIQ puts the three papers into a plain-language tool for operators, airspace authorities and city planners. It uses no equations and no research vocabulary, and it runs on the same engine as the papers.
+
+| Screen | Question it answers | Engine |
+|---|---|---|
+| **Plan flights** | Search any named place, or click the map, for From and To. Save several routes and compare them. Pick a departure hour from the live wind forecast and see the wind at 100/200/300/400 ft. The app reports the flight time, the energy (Wh and % of the battery), the cruise altitude, the altitude, energy and wind along the route, and the savings over a plan that ignores the wind. A **Best time to leave** button checks the next 12 hours. | Paper 1 Pareto search on a building-aware corridor and wind field |
+| **Corridor capacity** | Choose Compact, Standard or Wide, the requests per hour, 1–10 operators, one-way or two-way traffic, and calm or forecast wind. The app shows the % of requests approved, the average flight time and how fair access is. Three buttons answer *How much traffic can it take?* (capacity at 90% approval), *What size do we need?* (the smallest lanes × layers that reach the target approval) and *Is access fair?* | Paper 2 SIRE registry, run in a Web Worker |
+| **Dispatch** | Compares first come, first served with the CorridorIQ optimizer and a hindsight benchmark: requests served, emergency service and waiting time, with a live request board | Paper 3 rolling-horizon ILP schedules exported from Python |
+| **Validation** | TRR Table 1 and Figure 7, and TRB Figures 1 and 3, re-run next to the published values | same engine on the papers' open-field geometry |
+
+Every result has a **Download CSV** button. The map shows OpenStreetMap buildings (window textures, shadows), parks, water, road widths and trees, with dark mode. **Change area** loads any `.osm` file.
+
+```bash
+python make_app.py                                      # Dallas; captures a 24-h wind forecast (Open-Meteo, NWS fallback)
+python make_app.py --osm data/osm/smu_campus.osm.gz --name "SMU campus"
+```
+Open the built file from disk to get a live forecast (**Live forecast** button). Copies hosted with a strict content policy use the forecast captured at build time.
+
+**AAM Corridor Lab — `demo/lab.html` (research tool).** One page per paper, on any OpenStreetMap area:
 
 | Tab | What you can do | Validation |
 |---|---|---|

@@ -104,3 +104,36 @@ def layer_winds(profile, z_levels, bearing_deg):
         sp, df = profile_at(profile, max(z, 10.0))
         out.append((sp, toward_relative(df, bearing_deg)))
     return out
+
+
+def fetch_hours(lat, lon, hours=24):
+    """Hourly wind profiles for the next ``hours`` hours (Open-Meteo, NWS fallback).
+    Returns dict(source, hours=[{time, speed_ms[4], dir_from_deg[4]}], heights_m)."""
+    try:
+        q = dict(latitude=lat, longitude=lon, wind_speed_unit="ms", forecast_days=2, timezone="UTC",
+                 hourly=",".join([f"wind_speed_{h}m" for h in HEIGHTS] + [f"wind_direction_{h}m" for h in HEIGHTS]))
+        d = _get("https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(q))
+        if d.get("error"):
+            raise RuntimeError(d.get("reason"))
+        hr = d["hourly"]
+        import datetime as _dt
+        now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H")
+        i0 = next((i for i, t in enumerate(hr["time"]) if t[:13] >= now), 0)
+        out = [dict(time=hr["time"][i] + "Z", speed_ms=[hr[f"wind_speed_{h}m"][i] for h in HEIGHTS],
+                    dir_from_deg=[hr[f"wind_direction_{h}m"][i] for h in HEIGHTS])
+               for i in range(i0, min(i0 + hours, len(hr["time"])))]
+        return dict(source="Open-Meteo forecast", heights_m=HEIGHTS, hours=out)
+    except Exception as e1:  # noqa: BLE001
+        pt = _get(f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}")
+        per = _get(pt["properties"]["forecastHourly"])["properties"]["periods"][:hours]
+        compass = {"N": 0, "NNE": 22.5, "NE": 45, "ENE": 67.5, "E": 90, "ESE": 112.5, "SE": 135,
+                   "SSE": 157.5, "S": 180, "SSW": 202.5, "SW": 225, "WSW": 247.5, "W": 270,
+                   "WNW": 292.5, "NW": 315, "NNW": 337.5}
+        out = []
+        for p in per:
+            s10 = float(str(p["windSpeed"]).split()[0]) * 0.44704
+            d = compass.get(p["windDirection"], 0.0)
+            out.append(dict(time=p["startTime"], speed_ms=[s10 * (h / 10) ** 0.25 for h in HEIGHTS],
+                            dir_from_deg=[d] * len(HEIGHTS)))
+        return dict(source=f"U.S. National Weather Service hourly forecast (Open-Meteo unavailable: {e1})",
+                    heights_m=HEIGHTS, hours=out)
