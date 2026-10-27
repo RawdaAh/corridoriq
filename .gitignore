@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+results/*.log
+results/**/paper/
+demo/data.json
+.ipynb_checkpoints/
+results/geo.log
+data/osm/*.osm

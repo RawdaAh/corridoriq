@@ -1,0 +1,724 @@
+<title>Corridor Lab Dallas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D city with a floating instrument panel on the left (GeoWind2Plan-style).
+   Palette: pale concrete city, sectional-chart magenta for the corridor, four route hues. */
+:root {
+  --sky: #eef1f3;
+  --ground: #dfe3e6;
+  --bldg: #f7f8f9;
+  --road: #c3cad0;
+  --road-major: #a9b2ba;
+  --panel: #ffffffee;
+  --ink: #17202a;
+  --ink-2: #4c5864;
+  --ink-3: #7d8993;
+  --rule: #dde2e6;
+  --accent: #b5267f;
+  --lattice: #b5267f;
+  --m-gt: #2d3540;      /* ground truth: slate */
+  --m-fc: #2a78d6;      /* coarse forecast: blue */
+  --m-pr: #e8638f;      /* profile wind: pink */
+  --m-ag: #eb8a1e;      /* wind-agnostic: orange */
+  --op1: #2a78d6; --op2: #eb6834; --op3: #1baf7a;
+  --bad: #e34948;
+  --w-lo: #b8e0a2; --w-mid: #3aa6a0; --w-hi: #3b4fb8;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sky: #11171d; --ground: #1a2128; --bldg: #8f9aa4; --road: #2c363f; --road-major: #3d4955;
+    --panel: #161d24ee; --ink: #e8edf1; --ink-2: #aab5bf; --ink-3: #77838e; --rule: #2a343e;
+    --accent: #e05aa9; --lattice: #e05aa9; --m-gt: #e8edf1; --m-fc: #4b94ec; --m-pr: #f07aa3; --m-ag: #f09a3a;
+    --op1: #3987e5; --op2: #d95926; --op3: #199e70; --bad: #e66767;
+    --w-lo: #4d7a3f; --w-mid: #2f8f8a; --w-hi: #7d8cf0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --sky: #11171d; --ground: #1a2128; --bldg: #8f9aa4; --road: #2c363f; --road-major: #3d4955;
+  --panel: #161d24ee; --ink: #e8edf1; --ink-2: #aab5bf; --ink-3: #77838e; --rule: #2a343e;
+  --accent: #e05aa9; --lattice: #e05aa9; --m-gt: #e8edf1; --m-fc: #4b94ec; --m-pr: #f07aa3; --m-ag: #f09a3a;
+  --op1: #3987e5; --op2: #d95926; --op3: #199e70; --bad: #e66767;
+  --w-lo: #4d7a3f; --w-mid: #2f8f8a; --w-hi: #7d8cf0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--sky); color: var(--ink); font-family: var(--font-body); font-size: 13px; overflow: hidden; }
+#stage { position: fixed; inset: 0; }
+#stage canvas { display: block; }
+.overlay { position: fixed; inset: 0; pointer-events: none; }
+.pin { position: absolute; transform: translate(-50%, -100%); pointer-events: none; text-align: center; }
+.pin .bubble { font-family: var(--font-display); font-weight: 600; font-size: 20px; letter-spacing: .02em;
+  background: var(--panel); color: var(--ink); border: 2px solid var(--ink); border-radius: 22px; padding: 4px 14px;
+  display: inline-flex; gap: 8px; align-items: center; box-shadow: 0 2px 10px #0002; white-space: nowrap; }
+.pin .bubble small { font-family: var(--font-body); font-size: 11px; font-weight: 400; color: var(--ink-2); }
+.pin .stem { width: 2px; height: 46px; background: var(--ink); margin: 0 auto; }
+.pin.goal .bubble { background: var(--ink); color: var(--panel); }
+.pin.goal .bubble small { color: var(--panel); opacity: .8; }
+
+#panel { position: fixed; z-index: 5; top: max(12px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
+  width: min(370px, calc(100vw - 24px)); max-height: calc(100% - 24px); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; box-shadow: 0 6px 30px #0000001f;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+#panel.min > :not(.head) { display: none; }
+.head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; border-bottom: 1px solid var(--rule); gap: 8px; }
+.head h1 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: .02em; line-height: 1; }
+.head h1 small { display: block; font-family: var(--font-body); font-weight: 400; font-size: 11px; color: var(--ink-3); letter-spacing: 0; margin-top: 3px; }
+.iconbtn { border: 1px solid var(--rule); background: transparent; color: var(--ink-2); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 10px 14px 0; }
+.seg { display: flex; background: var(--rule); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button, .modes button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font: 500 12.5px var(--font-body);
+  padding: 6px 6px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"], .modes button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px #0002; }
+.modes button { border: 1px solid var(--rule); font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: .03em; }
+.modes button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+section.sec { padding: 10px 14px 12px; border-bottom: 1px solid var(--rule); display: grid; gap: 9px; }
+section.sec h2 { margin: 0; font-size: 12.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+section.sec h2 span { font-weight: 400; color: var(--ink-3); font-size: 11.5px; }
+.row { display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--ink-2); }
+.btns { display: flex; gap: 4px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--rule); background: transparent; color: var(--ink); font: 500 12px var(--font-body); padding: 5px 9px; border-radius: 7px; cursor: pointer; }
+.chip:hover { border-color: var(--ink-3); }
+.chip[aria-pressed="true"] { border-color: var(--ink); }
+select { font: 12.5px var(--font-body); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 7px; padding: 5px 6px; width: 100%; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.windbox { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; align-items: center; }
+#dial { width: 100px; height: 100px; cursor: grab; touch-action: none; }
+#dial text { font: 10px var(--font-mono); fill: var(--ink-3); }
+.kv { display: grid; gap: 6px; }
+.kv div { display: flex; justify-content: space-between; color: var(--ink-2); gap: 8px; }
+.kv b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+.big { display: grid; grid-template-columns: 1fr 1fr 64px; gap: 10px; align-items: stretch; }
+.big .n { font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.big .l { font-size: 11px; color: var(--ink-2); line-height: 1.3; margin-top: 3px; }
+#fly { border: 1px solid var(--rule); background: transparent; border-radius: 10px; cursor: pointer; color: var(--ink);
+  display: grid; place-items: center; font: 600 12px var(--font-body); padding: 4px; }
+#fly svg { width: 26px; height: 26px; }
+#fly[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.tabs4 { display: flex; background: var(--rule); border-radius: 8px; padding: 2px; }
+.tabs4 button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font: 500 11.5px var(--font-body); padding: 5px 2px; border-radius: 6px; cursor: pointer; }
+.tabs4 button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px #0002; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.checks label { display: flex; gap: 6px; align-items: center; cursor: pointer; white-space: nowrap; }
+.checks input { width: 15px; height: 15px; margin: 0; }
+.sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+canvas.chart { width: 100%; height: 120px; display: block; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+td, th { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--ink-3); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+td:first-child, th:first-child { text-align: left; }
+td.m { font-family: var(--font-mono); }
+.status { font-size: 11.5px; color: var(--ink-3); }
+.note { font-size: 11px; color: var(--ink-3); line-height: 1.45; margin: 0; }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kpis div { border-left: 2px solid var(--rule); padding-left: 7px; }
+.kpis .k { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.kpis .v { font-family: var(--font-mono); font-size: 17px; }
+.kpis .hot { border-left-color: var(--bad); }
+.play { display: flex; gap: 8px; align-items: center; }
+.play button { background: var(--accent); color: #fff; border: 0; border-radius: 7px; font: 600 14px var(--font-display); letter-spacing: .04em; padding: 6px 12px; cursor: pointer; min-width: 64px; }
+.play .clock { font-family: var(--font-mono); font-size: 12px; min-width: 6ch; }
+.legendbar { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); z-index: 4;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--ink-2); display: grid; gap: 5px; max-width: 260px; }
+.legendbar .ramp { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--w-lo), var(--w-mid), var(--w-hi)); }
+.legendbar .ends { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; }
+.legendbar a { color: var(--ink-2); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); top: max(12px, env(safe-area-inset-top, 0px)); z-index: 4; font-size: 11.5px; color: var(--ink-2);
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 9px; }
+.fallback { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
+@media (max-width: 640px) {
+  #panel { max-height: 55%; top: auto; bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+  .legendbar, .hint { display: none; }
+}
+</style>
+
+<div id="stage"></div>
+<div class="overlay" id="overlay">
+  <div class="pin start" id="pin-start"><div class="bubble">Start ○ <small id="start-name"></small></div><div class="stem"></div></div>
+  <div class="pin goal" id="pin-goal"><div class="bubble">Goal ⚑ <small id="goal-name"></small></div><div class="stem"></div></div>
+</div>
+<div class="hint">Drag to orbit · right-drag to pan · scroll to zoom</div>
+
+<aside id="panel" aria-label="Simulation controls">
+  <div class="head">
+    <h1>Corridor Lab · Dallas<small id="subtitle"></small></h1>
+    <button class="iconbtn" id="collapse" type="button" aria-label="Collapse panel">‹</button>
+  </div>
+  <div class="modes" role="tablist">
+    <button type="button" id="mode-mission" aria-pressed="true">Wind-aware mission</button>
+    <button type="button" id="mode-traffic" aria-pressed="false">Corridor traffic</button>
+  </div>
+
+  <!-- shared: wind -->
+  <section class="sec">
+    <h2>Background wind <span id="compass"></span></h2>
+    <div class="windbox">
+      <svg id="dial" viewBox="0 0 100 100" role="slider" aria-label="Wind direction relative to the corridor" tabindex="0" aria-valuemin="-180" aria-valuemax="180">
+        <circle cx="50" cy="50" r="38" fill="none" stroke="var(--rule)" stroke-width="2"></circle>
+        <g id="ticks"></g>
+        <text x="50" y="9" text-anchor="middle">90</text><text x="93" y="53" text-anchor="middle">0</text>
+        <text x="7" y="53" text-anchor="middle">180</text><text x="50" y="98" text-anchor="middle">−90</text>
+        <g id="needle"><line x1="22" y1="50" x2="78" y2="50" stroke="var(--m-pr)" stroke-width="0"></line>
+          <line id="nd" x1="50" y1="50" x2="80" y2="50" stroke="#1baf7a" stroke-width="5" stroke-linecap="round"></line>
+          <polygon id="nh" points="88,50 78,44 78,56" fill="#1baf7a"></polygon></g>
+        <circle cx="50" cy="50" r="4" fill="var(--ink)"></circle>
+      </svg>
+      <div class="kv">
+        <div>Wind toward <b id="dir-val">0°</b></div>
+        <div>Speed at 120 m</div>
+        <div class="seg" id="speeds"></div>
+        <div class="status" id="dir-help">0° blows from Start to Goal</div>
+      </div>
+    </div>
+    <div class="row">Wind particles <select id="layer"><option value="-1">Off</option></select></div>
+    <div class="row">Show <div class="btns"><button class="chip" id="t-lattice" aria-pressed="true" type="button">Corridor network</button><button class="chip" id="t-ceiling" aria-pressed="false" type="button">400 ft ceiling</button><button class="chip" id="t-follow" aria-pressed="false" type="button">Follow drone</button></div></div>
+  </section>
+
+  <!-- mission mode -->
+  <div id="mission-ui">
+    <section class="sec">
+      <h2>Mission <span id="mission-len"></span></h2>
+      <div class="row">Direction <div class="seg"><button type="button" id="dir-fwd" aria-pressed="true">Start → Goal</button><button type="button" id="dir-rev" aria-pressed="false">Goal → Start</button></div></div>
+      <div class="row">Random mission <div class="btns"><button class="chip" type="button" data-rand="tail">Tailwind</button><button class="chip" type="button" data-rand="head">Headwind</button><button class="chip" type="button" data-rand="cross">Crosswind</button></div></div>
+    </section>
+    <section class="sec">
+      <h2>Results <span id="timing"></span></h2>
+      <div class="big">
+        <div><div class="n" id="r-save">–</div><div class="l">less energy than wind-agnostic, with the true wind</div></div>
+        <div><div class="n" id="r-rec">–</div><div class="l">of that saving recovered by a coarse forecast</div></div>
+        <button id="fly" type="button" aria-pressed="false"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="4"/><circle cx="24" cy="8" r="4"/><circle cx="8" cy="24" r="4"/><circle cx="24" cy="24" r="4"/><path d="M11 11l10 10M21 11L11 21"/></svg><span id="fly-l">Fly</span></button>
+      </div>
+      <div class="tabs4" id="charttabs"><button type="button" data-k="E" aria-pressed="true">Energy</button><button type="button" data-k="Z" aria-pressed="false">Altitude</button><button type="button" data-k="V" aria-pressed="false">Ground speed</button><button type="button" data-k="W" aria-pressed="false">Wind on track</button></div>
+      <div class="checks" id="checks"></div>
+      <canvas class="chart" id="chart" aria-label="Route profile chart"></canvas>
+      <table id="rtable"></table>
+      <p class="note" id="mnote"></p>
+    </section>
+  </div>
+
+  <!-- traffic mode -->
+  <div id="traffic-ui" hidden>
+    <section class="sec">
+      <h2>Shared-intent reservations <span>SIRE</span></h2>
+      <div class="row">Trip requests <div><input type="range" id="demand" min="20" max="600" step="10" value="200"><div class="status" id="demand-l"></div></div></div>
+      <div class="row">Dispatch window <select id="window"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="20">20 min</option></select></div>
+      <div class="row">Slot length Δt <select id="slot"><option value="10" selected>10 s</option><option value="20">20 s</option><option value="60">60 s</option></select></div>
+      <div class="row">Opposing flows <div class="seg"><button type="button" id="rule-u" aria-pressed="true">Shared links</button><button type="button" id="rule-d" aria-pressed="false">Separated</button></div></div>
+      <div class="row">Two-way share <select id="share"><option value="0">One way</option><option value="0.25">25% reverse</option><option value="0.5" selected>50% reverse</option></select></div>
+      <button class="chip" id="run-traffic" type="button">Run registry</button>
+      <div class="kpis" id="tkpis"></div>
+      <div class="play"><button type="button" id="tplay">Play</button><input type="range" id="tscrub" min="0" max="1000" value="0" aria-label="Traffic replay time"><span class="clock" id="tclock">0:00</span></div>
+      <canvas class="chart" id="tchart" aria-label="Space-time ledger"></canvas>
+      <p class="note">Each operator routes itself on the link-time slots still open; the registry commits a route or rejects the request. Link times use the current true wind. Lines in the ledger are accepted trips; red ticks are rejections.</p>
+    </section>
+  </div>
+  <section class="sec"><p class="note" id="about"></p></section>
+</aside>
+
+<div class="legendbar" id="legendbar">
+  <div>Wind speed (m/s)</div><div class="ramp"></div><div class="ends"><span>0</span><span id="wmax">8</span></div>
+  <div>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+</div>
+
+<script>/*__ENGINE__*/</script>
+<script>const DATA=/*__DATA__*/null;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const G = window.GeoEngine;
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const METHODS = ["ground_truth", "forecast", "profile", "wind_agnostic"];
+const MLAB = { ground_truth: "Ground truth", forecast: "Coarse forecast", profile: "Profile wind", wind_agnostic: "Wind-agnostic" };
+const MCOL = { ground_truth: "--m-gt", forecast: "--m-fc", profile: "--m-pr", wind_agnostic: "--m-ag" };
+const fmt = (x, d = 1) => (x == null || !isFinite(x)) ? "–" : Number(x).toFixed(d);
+
+if (!window.THREE || !DATA) { document.body.insertAdjacentHTML("beforeend", '<div class="fallback">The 3D view needs three.js from cdnjs and jsDelivr. Check the connection and reload.</div>'); return; }
+
+// ------------------------------------------------------------------- data
+const D = DATA, C = D.corridor, L = D.meta.length_m;
+const corr = G.makeCorridor(C);
+const Hraw = atob(D.grid.H), H = new Float64Array(D.grid.nx * D.grid.ny);
+for (let i = 0; i < H.length; i++) H[i] = (Hraw.charCodeAt(2 * i) | (Hraw.charCodeAt(2 * i + 1) << 8)) / 10;
+const grid = Object.assign({}, D.grid, { H });
+const veh = D.vehicle;
+const st = { mode: "mission", dir: 0, speed: 4, fwd: true, layer: 2, lattice: true, ceiling: false,
+  W: null, plan: null, chart: "E", show: { ground_truth: true, forecast: true, profile: true, wind_agnostic: true },
+  flying: false, ft: 0, traffic: null, tt: 0, tplaying: false, rule: "undirected" };
+
+// corridor frame (x along, y left, z up) -> three (x - L/2, z, -y)
+const OX = L / 2;
+const V3 = (x, y, z) => new THREE.Vector3(x - OX, z, -y);
+
+// ------------------------------------------------------------------- scene
+const stage = $("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 5, 20000);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+const HOME = { pos: new THREE.Vector3(-OX * 1.25, 1000, 1300), tgt: new THREE.Vector3(-560, 20, 60) };
+camera.position.copy(HOME.pos); controls.target.copy(HOME.tgt);
+const hemi = new THREE.HemisphereLight(0xffffff, 0x9aa3ab, 0.75); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(-600, 1200, 500); scene.add(sun);
+function resize() { const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h); camera.aspect = w / h;
+  const off = w > 900 ? 200 : 0; if (off) camera.setViewOffset(w, h, -off, 0, w, h); else camera.clearViewOffset(); camera.updateProjectionMatrix(); }
+window.addEventListener("resize", resize); resize();
+const col = (n) => new THREE.Color(css(n));
+const groups = {};
+function group(name) { if (groups[name]) { scene.remove(groups[name]); groups[name].traverse((o) => { o.geometry && o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); }); } const g = new THREE.Group(); groups[name] = g; scene.add(g); return g; }
+
+function buildCity() {
+  scene.background = col("--sky");
+  const g = group("city");
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(L + 2600, 2600), new THREE.MeshLambertMaterial({ color: col("--ground") }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.5, 0); g.add(ground);
+  // roads
+  const minor = [], major = [];
+  for (const r of D.roads) { const p = r.p, arr = r.M ? major : minor; for (let k = 0; k + 3 < p.length; k += 2) { arr.push(p[k] - OX, 0.2, -p[k + 1], p[k + 2] - OX, 0.2, -p[k + 3]); } }
+  for (const [arr, c] of [[minor, "--road"], [major, "--road-major"]]) {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
+    g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col(c) })));
+  }
+  // buildings
+  const geos = [];
+  for (const b of D.buildings) {
+    const p = b.p, shape = new THREE.Shape();
+    shape.moveTo(p[0], p[1]); for (let k = 2; k < p.length; k += 2) shape.lineTo(p[k], p[k + 1]);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(1, b.h - b.b), bevelEnabled: false });
+    geo.translate(-OX, 0, b.b); geo.rotateX(-Math.PI / 2);
+    geo.deleteAttribute("uv"); geos.push(geo.index ? geo.toNonIndexed() : geo);
+  }
+  const merged = THREE.BufferGeometryUtils.mergeBufferGeometries(geos, false);
+  geos.forEach((x) => x.dispose());
+  g.add(new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ color: col("--bldg") })));
+  const edges = new THREE.EdgesGeometry(merged, 30);
+  g.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: col("--road-major"), transparent: true, opacity: 0.35 })));
+}
+function buildLattice() {
+  const g = group("lattice"); g.visible = st.lattice;
+  const v = [];
+  for (const [a, b] of C.edges) { const p = C.pos[a], q = C.pos[b]; v.push(p[0] - OX, p[2], -p[1], q[0] - OX, q[2], -q[1]); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+  g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--lattice"), transparent: true, opacity: 0.11 })));
+  // portals
+  const pads = new THREE.Group();
+  for (const n of [...C.origins, ...C.destinations]) {
+    const p = C.pos[n], m = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 1.2, 24), new THREE.MeshBasicMaterial({ color: col("--lattice"), transparent: true, opacity: 0.5 }));
+    m.position.copy(V3(p[0], p[1], 0.6)); pads.add(m);
+  }
+  g.add(pads);
+  const ceil = group("ceiling"); ceil.visible = st.ceiling;
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(L + 400, 2 * C.half + 400), new THREE.MeshBasicMaterial({ color: col("--lattice"), transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false }));
+  plane.rotation.x = -Math.PI / 2; plane.position.set(0, 121.9, 0); ceil.add(plane);
+}
+
+// ------------------------------------------------------------------- drone model
+function droneGeometry(scale) {
+  const parts = [];
+  const body = new THREE.SphereGeometry(1.0, 16, 10); body.scale(1.5, 0.55, 1.1); parts.push(body);
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) { const arm = new THREE.BoxGeometry(5.2, 0.25, 0.35); arm.rotateY(a); parts.push(arm); }
+  for (const [x, z] of [[1.85, 1.85], [-1.85, 1.85], [1.85, -1.85], [-1.85, -1.85]]) {
+    const hub = new THREE.CylinderGeometry(0.28, 0.28, 0.5, 10); hub.translate(x, 0.3, z); parts.push(hub);
+    const rot = new THREE.CylinderGeometry(1.25, 1.25, 0.08, 24); rot.translate(x, 0.6, z); parts.push(rot);
+  }
+  const ng = parts.map((p) => (p.index ? p.toNonIndexed() : p));
+  ng.forEach((p) => p.deleteAttribute("uv"));
+  const m = THREE.BufferGeometryUtils.mergeBufferGeometries(ng, false); m.scale(scale, scale, scale); return m;
+}
+function makeDrone(colorName, scale) {
+  const grp = new THREE.Group(), c = col(colorName);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), new THREE.MeshLambertMaterial({ color: c }));
+  body.scale.set(1.5 * scale, 0.55 * scale, 1.1 * scale); grp.add(body);
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(5.2 * scale, 0.25 * scale, 0.35 * scale), new THREE.MeshLambertMaterial({ color: c })); arm.rotation.y = a; grp.add(arm); }
+  grp.rotors = [];
+  for (const [x, z] of [[1.85, 1.85], [-1.85, 1.85], [1.85, -1.85], [-1.85, -1.85]]) {
+    const r = new THREE.Group(); r.position.set(x * scale, 0.6 * scale, z * scale);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.3 * scale, 1.3 * scale, 0.05 * scale, 28), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.28 }));
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(2.5 * scale, 0.06 * scale, 0.22 * scale), new THREE.MeshLambertMaterial({ color: c }));
+    r.add(disc); r.add(blade); grp.add(r); grp.rotors.push(r);
+  }
+  return grp;
+}
+
+// ------------------------------------------------------------------- wind particles
+const PART = { n: 3200, trail: 12 };
+function initParticles() {
+  const g = group("particles");
+  PART.pos = new Float32Array(PART.n * PART.trail * 3);
+  PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
+  PART.seg = new Float32Array(PART.n * (PART.trail - 1) * 6); PART.col = new Float32Array(PART.n * (PART.trail - 1) * 6);
+  PART.geo = new THREE.BufferGeometry();
+  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3));
+  PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3));
+  PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true }));
+  g.add(PART.mesh);
+  for (let i = 0; i < PART.n; i++) spawn(i, true);
+}
+function solidAt(x, y, z) {
+  const i = Math.floor((x - grid.x0) / grid.res), j = Math.floor((y - grid.y0) / grid.res);
+  if (i < 0 || j < 0 || i >= grid.nx || j >= grid.ny) return true;
+  return grid.H[i * grid.ny + j] >= z;
+}
+function spawn(i, randomAge) {
+  const z = C.z_levels[Math.max(1, st.layer)] || 60;
+  let x, y, tries = 0;
+  do { x = grid.x0 + Math.random() * grid.nx * grid.res; y = grid.y0 + Math.random() * grid.ny * grid.res; tries++; } while (solidAt(x, y, z) && tries < 20);
+  for (let k = 0; k < PART.trail; k++) { PART.pos[(i * PART.trail + k) * 3] = x; PART.pos[(i * PART.trail + k) * 3 + 1] = y; PART.pos[(i * PART.trail + k) * 3 + 2] = z; }
+  PART.life[i] = 3 + Math.random() * 5; PART.age[i] = randomAge ? Math.random() * PART.life[i] : 0;
+}
+const tmp = [0, 0];
+let rampCols = null;
+function rampColor(f) { const [a, b, c] = rampCols; const t = Math.min(1, Math.max(0, f)); return t < 0.5 ? a.clone().lerp(b, t * 2) : b.clone().lerp(c, (t - 0.5) * 2); }
+function stepParticles(dt) {
+  if (!st.W || st.layer < 0) { PART.mesh.visible = false; return; }
+  PART.mesh.visible = true;
+  const z = C.z_levels[st.layer] || 60, vmax = Math.max(1, st.speed * 1.6), bg = col("--sky"), visual = 28;
+  const T = PART.trail;
+  for (let i = 0; i < PART.n; i++) {
+    PART.age[i] += dt;
+    const b = i * T * 3;
+    if (PART.age[i] > PART.life[i]) spawn(i, false);
+    if (!REDUCED || PART.age[i] === 0) {
+      for (let k = T - 1; k > 0; k--) { PART.pos[b + k * 3] = PART.pos[b + (k - 1) * 3]; PART.pos[b + k * 3 + 1] = PART.pos[b + (k - 1) * 3 + 1]; }
+      G.sample(st.W, PART.pos[b], PART.pos[b + 1], z, tmp);
+      PART.pos[b] += tmp[0] * dt * visual; PART.pos[b + 1] += tmp[1] * dt * visual;
+      if (solidAt(PART.pos[b], PART.pos[b + 1], z) || (Math.abs(tmp[0]) + Math.abs(tmp[1]) < 1e-3 && st.speed > 0)) { spawn(i, false); }
+    }
+    const sp = Math.hypot(tmp[0], tmp[1]) / vmax, c = rampColor(sp);
+    for (let k = 0; k < T - 1; k++) {
+      const s = (i * (T - 1) + k) * 6, f = 1 - k / (T - 1), fade = Math.min(1, PART.age[i] * 2) * f;
+      PART.seg[s] = PART.pos[b + k * 3] - OX; PART.seg[s + 1] = z; PART.seg[s + 2] = -PART.pos[b + k * 3 + 1];
+      PART.seg[s + 3] = PART.pos[b + (k + 1) * 3] - OX; PART.seg[s + 4] = z; PART.seg[s + 5] = -PART.pos[b + (k + 1) * 3 + 1];
+      const cc = bg.clone().lerp(c, 0.25 + 0.75 * fade);
+      PART.col[s] = cc.r; PART.col[s + 1] = cc.g; PART.col[s + 2] = cc.b; PART.col[s + 3] = cc.r; PART.col[s + 4] = cc.g; PART.col[s + 5] = cc.b;
+    }
+  }
+  PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true;
+}
+
+// ------------------------------------------------------------------- mission planning
+function od() { return st.fwd ? [C.o, C.d] : [C.d, C.o]; }
+function params() { return Object.assign({}, D.wind, { speed_ms: st.speed, direction_deg: st.dir }); }
+function recompute() {
+  $("timing").textContent = "Predicting and planning…";
+  setTimeout(() => {
+    const t0 = performance.now();
+    st.W = G.solveWind(grid, C.z_levels, params());
+    const [o, d] = od();
+    st.plan = G.planMission(corr, st.W, params(), veh, o, d);
+    const ms = performance.now() - t0;
+    $("timing").textContent = `Predicted and planned in ${(ms / 1000).toFixed(1)} s`;
+    drawRoutes(); results(); placePins();
+    if (st.mode === "traffic") runTraffic();
+  }, 20);
+}
+function drawRoutes() {
+  const g = group("routes"); st.drones = {};
+  if (st.mode !== "mission" || !st.plan) return;
+  METHODS.forEach((m, k) => {
+    const r = st.plan.routes[m]; if (!r || !st.show[m]) return;
+    const off = (k - 1.5) * 2.2;  // small lateral offset so coincident routes stay visible
+    const pts = r.nodes.map((n) => { const p = C.pos[n]; return V3(p[0], p[1] + off, Math.max(p[2], 2)); });
+    const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.1);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(40, pts.length * 12), 2.6, 8, false),
+      new THREE.MeshLambertMaterial({ color: col(MCOL[m]), transparent: true, opacity: m === "ground_truth" ? 0.95 : 0.85 }));
+    g.add(tube);
+    const dr = makeDrone(MCOL[m], 11); dr.position.copy(pts[0]); dr.position.y += 10; g.add(dr);
+    st.drones[m] = { obj: dr, r, off };
+  });
+  setFlyTime(st.ft);
+}
+function results() {
+  const R = st.plan.routes, E = (m) => R[m] ? R[m].E[R[m].E.length - 1] : NaN, T = (m) => R[m] ? R[m].T[R[m].T.length - 1] : NaN;
+  const save = 100 * (1 - E("ground_truth") / E("wind_agnostic"));
+  const full = E("wind_agnostic") - E("ground_truth");
+  const rec = full > 1e-6 ? 100 * (E("wind_agnostic") - E("forecast")) / full : NaN;
+  $("r-save").textContent = isFinite(save) ? `${fmt(save, 1)} %` : "–";
+  $("r-rec").textContent = isFinite(rec) ? `${fmt(rec, 1)} %` : "–";
+  $("rtable").innerHTML = `<thead><tr><th>Planning wind</th><th>Wh</th><th>Wh/km</th><th>min</th><th>vs agnostic</th></tr></thead><tbody>${
+    METHODS.map((m) => R[m] ? `<tr><td><span class="sw" style="background:var(${MCOL[m]})"></span> ${MLAB[m]}</td><td class="m">${fmt(E(m) / 3600, 1)}</td><td class="m">${fmt(E(m) / 3600 / (R[m].dist / 1000), 1)}</td><td class="m">${fmt(T(m) / 60, 2)}</td><td class="m">${fmt(-100 * (1 - E(m) / E("wind_agnostic")), 1)}%</td></tr>` : `<tr><td>${MLAB[m]}</td><td colspan="4">no feasible route</td></tr>`).join("")}</tbody>`;
+  const rel = ((st.dir - (st.fwd ? 0 : 180)) % 360 + 540) % 360 - 180;
+  const cls = Math.abs(rel) <= 45 ? "a tailwind" : Math.abs(rel) >= 135 ? "a headwind" : "a crosswind";
+  $("mnote").textContent = `This is ${cls} mission. Every route is planned with its own wind belief and then flown in the true building-aware wind; energy uses the TRR drag model with a crab angle for the cross component.`;
+  drawChart();
+}
+function profile(m) {
+  const r = st.plan.routes[m]; if (!r) return null;
+  const xs = [0], E = [], Z = [], V = [], Wt = [];
+  const B = st.plan.beliefs.ground_truth;
+  for (let k = 0; k < r.nodes.length; k++) {
+    const p = C.pos[r.nodes[k]];
+    if (k) xs.push(xs[k - 1] + corr.len[r.arcs[k - 1]] / 1000);
+    E.push(r.E[k] / 3600); Z.push(p[2]);
+    if (k) {
+      const a = r.arcs[k - 1], dt = r.T[k] - r.T[k - 1];
+      V.push(corr.len[a] / dt);
+      const q = C.pos[r.nodes[k - 1]], hx = p[0] - q[0], hy = p[1] - q[1], hh = Math.hypot(hx, hy) || 1;
+      const u = 0.5 * (B.u[r.nodes[k]] + B.u[r.nodes[k - 1]]) / G.MPH_PER_MS, v = 0.5 * (B.v[r.nodes[k]] + B.v[r.nodes[k - 1]]) / G.MPH_PER_MS;
+      Wt.push(Math.hypot(hx, hy) < 1e-6 ? 0 : (u * hx + v * hy) / hh);
+    } else { V.push(NaN); Wt.push(NaN); }
+  }
+  return { xs, E, Z, V, W: Wt };
+}
+function drawChart() {
+  const c = $("chart"), r = c.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  c.width = r.width * dpr; c.height = r.height * dpr;
+  const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, r.width, r.height);
+  if (!st.plan) return;
+  const key = st.chart, P = {};
+  for (const m of METHODS) if (st.show[m]) P[m] = profile(m);
+  let ymin = Infinity, ymax = -Infinity, xmax = 0;
+  for (const m in P) { if (!P[m]) continue; P[m][key].forEach((v) => { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); xmax = Math.max(xmax, P[m].xs[P[m].xs.length - 1]); }
+  if (!isFinite(ymin)) return;
+  if (key === "E" || key === "Z") ymin = Math.min(0, ymin);
+  if (ymax - ymin < 1e-6) { ymax += 1; ymin -= 1; }
+  const pad = (ymax - ymin) * 0.08; ymax += pad; if (key !== "E" && key !== "Z") ymin -= pad;
+  const m = { l: 34, r: 6, t: 14, b: 18 }, w = r.width, h = r.height;
+  const X = (x) => m.l + x / xmax * (w - m.l - m.r), Y = (y) => h - m.b - (y - ymin) / (ymax - ymin) * (h - m.t - m.b);
+  ctx.font = `10px ${css("--font-mono")}`; ctx.fillStyle = css("--ink-3"); ctx.strokeStyle = css("--rule"); ctx.lineWidth = 1;
+  const unit = { E: "Wh", Z: "m", V: "m/s", W: "m/s (+ tail)" }[key];
+  ctx.textAlign = "left"; ctx.fillText(unit, 2, 9);
+  for (let i = 0; i <= 3; i++) { const v = ymin + (ymax - ymin) * i / 3, y = Y(v); ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(w - m.r, y); ctx.stroke(); ctx.textAlign = "right"; ctx.fillText(Math.abs(ymax - ymin) > 20 ? v.toFixed(0) : v.toFixed(1), m.l - 4, y + 3); }
+  ctx.textAlign = "left"; ctx.fillText("0 km", m.l, h - 4); ctx.textAlign = "right"; ctx.fillText(`${xmax.toFixed(2)} km`, w - m.r, h - 4);
+  if (key === "W") { ctx.strokeStyle = css("--ink-3"); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(m.l, Y(0)); ctx.lineTo(w - m.r, Y(0)); ctx.stroke(); ctx.setLineDash([]); }
+  for (const mm of METHODS) {
+    const p = P[mm]; if (!p) continue;
+    ctx.strokeStyle = css(MCOL[mm]); ctx.lineWidth = 2; ctx.beginPath(); let started = false;
+    p[key].forEach((v, i) => {
+      if (!isFinite(v)) return;
+      const x = key === "V" || key === "W" ? (p.xs[i - 1] + p.xs[i]) / 2 : p.xs[i];
+      if (!started) { ctx.moveTo(X(x), Y(v)); started = true; } else ctx.lineTo(X(x), Y(v));
+    });
+    ctx.stroke();
+  }
+}
+
+// ------------------------------------------------------------------- fly animation
+function along(nodes, times, t, off) {
+  const k = times.length - 1;
+  if (t <= times[0]) { const p = C.pos[nodes[0]]; return [V3(p[0], p[1] + off, Math.max(p[2], 2)), null]; }
+  if (t >= times[k]) { const p = C.pos[nodes[k]]; return [V3(p[0], p[1] + off, Math.max(p[2], 2)), null]; }
+  let i = 0; while (times[i + 1] < t) i++;
+  const f = (t - times[i]) / (times[i + 1] - times[i] || 1), p = C.pos[nodes[i]], q = C.pos[nodes[i + 1]];
+  const a = V3(p[0], p[1] + off, Math.max(p[2], 2)), b = V3(q[0], q[1] + off, Math.max(q[2], 2));
+  return [a.clone().lerp(b, f), b.clone().sub(a)];
+}
+function setFlyTime(t) {
+  st.ft = t;
+  for (const m in st.drones || {}) {
+    const d = st.drones[m], [pos, dir] = along(d.r.nodes, d.r.T, t, d.off);
+    d.obj.position.copy(pos); d.obj.position.y += 10;
+    if (dir && (dir.x || dir.z)) d.obj.rotation.y = Math.atan2(-dir.z, dir.x);
+  }
+}
+function flyMax() { let mx = 0; for (const m in st.drones || {}) mx = Math.max(mx, st.drones[m].r.T.slice(-1)[0]); return mx; }
+
+// ------------------------------------------------------------------- traffic (SIRE)
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function runTraffic() {
+  if (!st.W) return;
+  const N = +$("demand").value, win = +$("window").value, slot = +$("slot").value, share = +$("share").value;
+  const R = rng(1234 + N), trips = [];
+  for (let k = 0; k < N; k++) {
+    const rev = R() < share, O = rev ? C.destinations : C.origins, Dd = rev ? C.origins : C.destinations;
+    trips.push({ id: k + 1, op: 1 + Math.floor(R() * 3), o: O[Math.floor(R() * O.length)], d: Dd[Math.floor(R() * Dd.length)], dispatch: Math.floor(R() * win * 60 / slot) });
+  }
+  const tc = G.linkCosts(corr, G.nodeWind(st.W, corr), veh);
+  const Hs = Math.ceil((win * 60 + 900) / slot);
+  const t0 = performance.now();
+  const res = G.sire(corr, tc.t, slot, Hs, trips, st.rule);
+  const ms = performance.now() - t0;
+  const acc = res.filter((r) => r.ok);
+  st.traffic = { trips, res, slot, ms, win, tmax: Math.max(...acc.map((r) => r.legs[r.legs.length - 1][2]), win * 60 / slot) * slot };
+  buildFleet(); st.tt = 0; drawTraffic();
+}
+function buildFleet() {
+  const g = group("fleet");
+  const T = st.traffic; if (!T) return;
+  const n = T.res.filter((r) => r.ok).length;
+  const geo = droneGeometry(5.5);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, n));
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const ops = [col("--op1"), col("--op2"), col("--op3")];
+  let k = 0; T.idx = [];
+  T.trips.forEach((tr, i) => { if (T.res[i].ok) { mesh.setColorAt(k, ops[tr.op - 1]); T.idx.push(i); k++; } });
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  g.add(mesh); T.mesh = mesh;
+  // rejection rings
+  const rg = new THREE.Group(); g.add(rg); T.rings = [];
+  for (const n2 of [...C.origins, ...C.destinations]) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(11, 15, 32), new THREE.MeshBasicMaterial({ color: col("--bad"), transparent: true, opacity: 0, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; const p = C.pos[n2]; ring.position.copy(V3(p[0], p[1], 1.5)); rg.add(ring); T.rings.push({ n: n2, m: ring });
+  }
+}
+const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), S1 = new THREE.Vector3(1, 1, 1), UP = new THREE.Vector3(0, 1, 0);
+function drawTraffic() {
+  const T = st.traffic; if (!T || !T.mesh) return;
+  const t = st.tt, slot = T.slot;
+  let air = 0, sub = 0, ok = 0;
+  T.idx.forEach((i, k) => {
+    const legs = T.res[i].legs, ts = legs[0][1] * slot, te = legs[legs.length - 1][2] * slot;
+    let p;
+    if (t < ts || t > te) { p = new THREE.Vector3(0, -9999, 0); }
+    else {
+      let L0 = legs[0]; for (const lg of legs) if (lg[1] * slot <= t) L0 = lg;
+      const f = Math.min(1, (t - L0[1] * slot) / ((L0[2] - L0[1]) * slot)), a = C.pos[corr.af[L0[0]]], b = C.pos[corr.at[L0[0]]];
+      p = V3(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, Math.max(2, a[2] + (b[2] - a[2]) * f) + 3);
+      Q.setFromAxisAngle(UP, Math.atan2(-(b[1] - a[1]) * -1, b[0] - a[0])); air++;
+    }
+    M4.compose(p, Q, S1); T.mesh.setMatrixAt(k, M4);
+  });
+  T.mesh.instanceMatrix.needsUpdate = true;
+  const recent = {};
+  T.trips.forEach((tr, i) => { const td = tr.dispatch * slot; if (td <= t) { sub++; if (T.res[i].ok) ok++; else if (t - td < 6) recent[tr.o] = Math.max(recent[tr.o] || 0, 1 - (t - td) / 6); } });
+  for (const r of T.rings) r.m.material.opacity = (recent[r.n] || 0) * 0.85;
+  const accAll = T.res.filter((r) => r.ok), meanT = accAll.reduce((s, r) => s + r.travel, 0) / Math.max(1, accAll.length);
+  $("tkpis").innerHTML = [["Submitted", sub], ["Accepted", ok], ["Rejected", sub - ok, sub - ok > 0], ["Success rate", sub ? fmt(100 * ok / sub, 1) + "%" : "–"], ["Airborne", air], ["Mean flight", fmt(meanT / 60, 1) + " min"]]
+    .map(([k, v, hot]) => `<div class="${hot ? "hot" : ""}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+  $("tclock").textContent = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  $("tscrub").value = String(Math.round(t / T.tmax * 1000));
+  // ledger
+  const c = $("tchart"), r = c.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  c.width = r.width * dpr; c.height = r.height * dpr;
+  const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, r.width, r.height);
+  const m = { l: 30, r: 6, t: 8, b: 16 }, w = r.width, h = r.height;
+  const X = (s) => m.l + s / T.tmax * (w - m.l - m.r), Y = (x) => h - m.b - x / L * (h - m.t - m.b);
+  ctx.font = `10px ${css("--font-mono")}`; ctx.fillStyle = css("--ink-3"); ctx.textAlign = "left";
+  ctx.fillText("Goal", 0, m.t + 6); ctx.fillText("Start", 0, h - m.b); ctx.fillText("0", m.l, h - 3); ctx.textAlign = "right"; ctx.fillText(`${Math.round(T.tmax / 60)} min`, w - m.r, h - 3);
+  ctx.globalAlpha = Math.max(0.15, Math.min(0.7, 60 / Math.max(1, T.idx.length)));
+  const opc = [css("--op1"), css("--op2"), css("--op3")];
+  T.idx.forEach((i) => { const legs = T.res[i].legs; ctx.strokeStyle = opc[T.trips[i].op - 1]; ctx.beginPath(); ctx.moveTo(X(legs[0][1] * slot), Y(C.pos[corr.af[legs[0][0]]][0])); for (const lg of legs) ctx.lineTo(X(lg[2] * slot), Y(C.pos[corr.at[lg[0]]][0])); ctx.stroke(); });
+  ctx.globalAlpha = 0.6; ctx.strokeStyle = css("--bad");
+  T.trips.forEach((tr, i) => { if (!T.res[i].ok) { const x = X(tr.dispatch * slot), y = Y(C.pos[tr.o][0]); ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4); ctx.stroke(); } });
+  ctx.globalAlpha = 1; ctx.strokeStyle = css("--accent"); ctx.beginPath(); ctx.moveTo(X(t), m.t); ctx.lineTo(X(t), h - m.b); ctx.stroke();
+}
+
+// ------------------------------------------------------------------- pins
+function placePins() {
+  const [o, d] = od();
+  st.pinA = V3(C.pos[o][0], C.pos[o][1], 0); st.pinB = V3(C.pos[d][0], C.pos[d][1], 0);
+  $("start-name").textContent = st.fwd ? D.meta.start : D.meta.goal;
+  $("goal-name").textContent = st.fwd ? D.meta.goal : D.meta.start;
+}
+function projectPins() {
+  for (const [id, v] of [["pin-start", st.pinA], ["pin-goal", st.pinB]]) {
+    if (!v) continue;
+    const p = v.clone().project(camera), el = $(id);
+    const vis = p.z < 1 && Math.abs(p.x) < 1.2 && Math.abs(p.y) < 1.2;
+    el.style.display = vis ? "block" : "none";
+    el.style.left = `${(p.x + 1) / 2 * window.innerWidth}px`; el.style.top = `${(1 - p.y) / 2 * window.innerHeight}px`;
+  }
+}
+
+// ------------------------------------------------------------------- UI wiring
+function setDialUI() {
+  const a = st.dir * Math.PI / 180, cx = 50 + 30 * Math.cos(a), cy = 50 - 30 * Math.sin(a);
+  const hx = 50 + 39 * Math.cos(a), hy = 50 - 39 * Math.sin(a);
+  $("nd").setAttribute("x1", 50 - 18 * Math.cos(a)); $("nd").setAttribute("y1", 50 + 18 * Math.sin(a));
+  $("nd").setAttribute("x2", cx); $("nd").setAttribute("y2", cy);
+  const px = -Math.sin(a), py = -Math.cos(a);
+  $("nh").setAttribute("points", `${hx},${hy} ${cx + 6 * px},${cy + 6 * py} ${cx - 6 * px},${cy - 6 * py}`);
+  const shown = ((st.dir + 180) % 360 + 360) % 360 - 180;
+  $("dir-val").textContent = `${Math.round(shown)}°`; $("dial").setAttribute("aria-valuenow", String(Math.round(shown)));
+  // compass: corridor bearing (deg CCW from east) + relative direction -> blows toward; meteorological 'from'
+  const toward = D.meta.bearing_deg + st.dir, fromCompass = ((90 - toward + 180) % 360 + 360) % 360;
+  const names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  $("compass").textContent = `${st.speed} m/s from ${names[Math.round(fromCompass / 22.5) % 16]} (${Math.round(fromCompass)}°)`;
+  $("dir-help").textContent = "0° blows from Start toward Goal";
+  $("wmax").textContent = String(Math.round(st.speed * 1.6));
+}
+let dialTimer = null;
+function setDir(v, now) { st.dir = Math.round(v / 5) * 5; setDialUI(); clearTimeout(dialTimer); dialTimer = setTimeout(recompute, now ? 0 : 180); }
+(function wire() {
+  const dial = $("dial");
+  let tickHtml = ""; for (let k = 0; k < 36; k++) { const a = k * 10 * Math.PI / 180, r1 = k % 9 === 0 ? 31 : 34; tickHtml += `<line x1="${50 + r1 * Math.cos(a)}" y1="${50 - r1 * Math.sin(a)}" x2="${50 + 38 * Math.cos(a)}" y2="${50 - 38 * Math.sin(a)}" stroke="var(--rule)" stroke-width="1"/>`; }
+  $("ticks").innerHTML = tickHtml;
+  const angle = (e) => { const r = dial.getBoundingClientRect(); return Math.atan2(-(e.clientY - r.top - r.height / 2), e.clientX - r.left - r.width / 2) * 180 / Math.PI; };
+  let drag = false;
+  dial.addEventListener("pointerdown", (e) => { drag = true; dial.setPointerCapture(e.pointerId); setDir(angle(e)); });
+  dial.addEventListener("pointermove", (e) => { if (drag) setDir(angle(e)); });
+  dial.addEventListener("pointerup", () => { drag = false; });
+  dial.addEventListener("keydown", (e) => { if (e.key === "ArrowLeft" || e.key === "ArrowUp") setDir(st.dir + 15); if (e.key === "ArrowRight" || e.key === "ArrowDown") setDir(st.dir - 15); });
+  $("speeds").innerHTML = [0, 2, 4, 8, 12].map((s) => `<button type="button" data-s="${s}" aria-pressed="${s === st.speed}">${s || "calm"}</button>`).join("");
+  $("speeds").querySelectorAll("button").forEach((b) => b.onclick = () => { st.speed = +b.dataset.s; $("speeds").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b)); setDialUI(); recompute(); });
+  C.z_levels.forEach((z, k) => { if (k > 0) $("layer").insertAdjacentHTML("beforeend", `<option value="${k}"${k === st.layer ? " selected" : ""}>Horizontal ${z} m (${Math.round(z / 0.3048 / 10) * 10} ft)</option>`); });
+  $("layer").onchange = (e) => { st.layer = +e.target.value; if (PART.n) for (let i = 0; i < PART.n; i++) spawn(i, true); };
+  const tog = (id, key, grp) => { $(id).onclick = () => { st[key] = !st[key]; $(id).setAttribute("aria-pressed", st[key]); groups[grp].visible = st[key]; }; };
+  tog("t-lattice", "lattice", "lattice"); tog("t-ceiling", "ceiling", "ceiling");
+  $("dir-fwd").onclick = () => { st.fwd = true; $("dir-fwd").setAttribute("aria-pressed", true); $("dir-rev").setAttribute("aria-pressed", false); recompute(); };
+  $("dir-rev").onclick = () => { st.fwd = false; $("dir-rev").setAttribute("aria-pressed", true); $("dir-fwd").setAttribute("aria-pressed", false); recompute(); };
+  document.querySelectorAll("[data-rand]").forEach((b) => b.onclick = () => {
+    const base = st.fwd ? 0 : 180, k = b.dataset.rand, r = Math.random();
+    const rel = k === "tail" ? (r - 0.5) * 60 : k === "head" ? 180 + (r - 0.5) * 60 : (r < 0.5 ? 90 : -90) + (Math.random() - 0.5) * 40;
+    setDir(base + rel, true); if (st.speed === 0) { st.speed = 4; $("speeds").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", +x.dataset.s === 4)); }
+  });
+  $("checks").innerHTML = METHODS.map((m) => `<label><input type="checkbox" data-m="${m}" checked> <span class="sw" style="background:var(${MCOL[m]})"></span>${MLAB[m]}</label>`).join("");
+  $("checks").querySelectorAll("input").forEach((i) => i.onchange = () => { st.show[i.dataset.m] = i.checked; drawRoutes(); drawChart(); });
+  $("charttabs").querySelectorAll("button").forEach((b) => b.onclick = () => { st.chart = b.dataset.k; $("charttabs").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b)); drawChart(); });
+  $("fly").onclick = () => { st.flying = !st.flying; if (st.flying && st.ft >= flyMax()) setFlyTime(0); $("fly").setAttribute("aria-pressed", st.flying); $("fly-l").textContent = st.flying ? "Stop" : "Fly"; };
+  $("collapse").onclick = () => { const p = $("panel"); p.classList.toggle("min"); $("collapse").textContent = p.classList.contains("min") ? "›" : "‹"; };
+  const mode = (m) => {
+    st.mode = m; $("mode-mission").setAttribute("aria-pressed", m === "mission"); $("mode-traffic").setAttribute("aria-pressed", m === "traffic");
+    $("mission-ui").hidden = m !== "mission"; $("traffic-ui").hidden = m !== "traffic";
+    groups.fleet && (groups.fleet.visible = m === "traffic");
+    drawRoutes(); $("overlay").style.visibility = m === "mission" ? "visible" : "hidden";
+    if (m === "traffic") runTraffic();
+  };
+  $("mode-mission").onclick = () => mode("mission"); $("mode-traffic").onclick = () => mode("traffic");
+  const dl = () => { $("demand-l").textContent = `${$("demand").value} trips · 3 operators`; };
+  $("demand").oninput = dl; dl();
+  ["demand", "window", "slot", "share"].forEach((id) => $(id).onchange = runTraffic);
+  $("rule-u").onclick = () => { st.rule = "undirected"; $("rule-u").setAttribute("aria-pressed", true); $("rule-d").setAttribute("aria-pressed", false); runTraffic(); };
+  $("rule-d").onclick = () => { st.rule = "directed"; $("rule-d").setAttribute("aria-pressed", true); $("rule-u").setAttribute("aria-pressed", false); runTraffic(); };
+  $("run-traffic").onclick = runTraffic;
+  $("t-follow").onclick = () => { st.follow = !st.follow; $("t-follow").setAttribute("aria-pressed", st.follow); if (!st.follow) { camera.position.copy(HOME.pos); controls.target.copy(HOME.tgt); } };
+  $("tplay").onclick = () => { st.tplaying = !st.tplaying; $("tplay").textContent = st.tplaying ? "Pause" : "Play"; if (st.tplaying && st.traffic && st.tt >= st.traffic.tmax) st.tt = 0; };
+  $("tscrub").oninput = (e) => { if (st.traffic) { st.tt = +e.target.value / 1000 * st.traffic.tmax; drawTraffic(); } };
+  $("subtitle").textContent = `${D.meta.start} → ${D.meta.goal}`;
+  $("mission-len").textContent = `${(L / 1000).toFixed(2)} km · 30–120 m`;
+  $("about").innerHTML = `${D.meta.n_buildings.toLocaleString()} OpenStreetMap buildings (${D.meta.measured_heights} with tagged heights, ${D.meta.over_ceiling} taller than the 120 m Part 107 ceiling). Corridor: ${C.module[0].toFixed(0)} × ${C.module[1]} m modules, layers ${C.z_levels.join("/")} m; ${D.meta.removed_links.toLocaleString()} links removed where they would hit a building. Wind: building-aware surrogate (potential flow around footprints with wake deficits and shear), not CFD.`;
+})();
+
+// ------------------------------------------------------------------- loop
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  controls.update();
+  stepParticles(REDUCED ? 0.0 : dt);
+  if (st.mode === "mission") {
+    if (st.flying) { setFlyTime(st.ft + dt * 12); if (st.ft >= flyMax()) { st.flying = false; $("fly").setAttribute("aria-pressed", false); $("fly-l").textContent = "Fly"; } }
+    const lead = st.drones && (st.drones.ground_truth || Object.values(st.drones)[0]);
+    if (st.follow && lead) { const p = lead.obj.position; controls.target.lerp(p, 0.15); const want = p.clone().add(new THREE.Vector3(-170, 330, 260)); camera.position.lerp(want, 0.08); }
+    if (!REDUCED) for (const m in st.drones || {}) st.drones[m].obj.rotors.forEach((r, k) => { r.rotation.y += (k % 2 ? 1 : -1) * dt * 40; });
+  } else if (st.traffic && st.tplaying) {
+    st.tt += dt * 20; if (st.tt >= st.traffic.tmax) { st.tt = st.traffic.tmax; st.tplaying = false; $("tplay").textContent = "Play"; }
+    drawTraffic();
+  }
+  renderer.render(scene, camera);
+  if (st.mode === "mission") projectPins();
+  requestAnimationFrame(loop);
+}
+function themeAll() { rampCols = [col("--w-lo"), col("--w-mid"), col("--w-hi")]; buildCity(); buildLattice(); drawRoutes(); if (st.traffic) buildFleet(); drawChart(); }
+rampCols = [col("--w-lo"), col("--w-mid"), col("--w-hi")];
+buildCity(); buildLattice(); initParticles(); setDialUI(); placePins();
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeAll);
+new MutationObserver(themeAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+setDir(-20, true);   // open on an oblique tailwind mission, drones mid-flight
+setTimeout(() => { setFlyTime(flyMax() * 0.3 || 0); if (!REDUCED) $("fly").click(); }, 1600);
+requestAnimationFrame(loop);
+})();
+</script>

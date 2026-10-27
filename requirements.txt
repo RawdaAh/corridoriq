@@ -1,0 +1,7 @@
+numpy>=1.24
+scipy>=1.11
+pandas>=2.0
+networkx>=3.1
+matplotlib>=3.7
+numba>=0.58      # optional: 20-50x faster SIRE route search (pure-numpy fallback otherwise)
+pytest>=7        # tests only
