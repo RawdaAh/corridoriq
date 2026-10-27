@@ -107,7 +107,8 @@ def run_mission(corr, veh, m: Mission, wind_speed: float, rule: str = "energy",
         if r is None:
             rows.append(dict(method=name, feasible=False))
             continue
-        times, energies = evaluate_route(corr, veh, truth, r.arcs, depart, model, truth_costs)
+        times, energies = evaluate_route(corr, veh, truth, r.arcs, depart, model, truth_costs,
+                                         takeoff_j=r.energies[0])
         ok = bool(np.isfinite(times[-1]))
         max_shift, frac_shift = slot_drift(r.times, times, depart, slot_sec) if ok else (np.nan, np.nan)
         z = corr.pos[r.nodes, 2]

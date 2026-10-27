@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .corridor import Corridor
-from .energy import J_PER_KWH, VehicleModel, wind_link_costs
+from .energy import J_PER_KWH, VehicleModel, no_wind_route_energy, wind_link_costs
 
 TOL_T = 1e-6
 TOL_E = 1e-6
@@ -65,7 +65,8 @@ def pareto_routes(corr: Corridor, veh: VehicleModel, wind, origin: int, destinat
     out = corr.out_arcs()
     af, at = corr.arc_from, corr.arc_to
     open_arc = np.ones(corr.n_arcs, bool) if link_mask is None else np.asarray(link_mask, bool)
-    e_to = veh.takeoff_energy_j()
+    e_to = veh.takeoff_energy_j(no_wind_route_energy(corr, veh, origin, destination)
+                                if veh.phase_dependent else None)
     ground = corr.ground
     cap = veh.battery_kwh * J_PER_KWH
 
@@ -139,7 +140,7 @@ def pareto_routes(corr: Corridor, veh: VehicleModel, wind, origin: int, destinat
 
 
 def evaluate_route(corr: Corridor, veh: VehicleModel, wind, arcs, depart_sec: float,
-                   model: str = "paper", costs=None):
+                   model: str = "paper", costs=None, takeoff_j: float = 0.0):
     """Fly a fixed arc sequence through a (possibly different) wind field.
 
     Returns cumulative times and energies at every node; inf if a link is impassable.
@@ -147,7 +148,7 @@ def evaluate_route(corr: Corridor, veh: VehicleModel, wind, arcs, depart_sec: fl
     if costs is None:
         costs = wind_link_costs(corr, veh, wind, model)
     tt, ee = costs
-    t, e = 0.0, veh.takeoff_energy_j()
+    t, e = 0.0, takeoff_j
     times, energies = [t], [e]
     for a in arcs:
         b = int(wind.bin_at(depart_sec + t))

@@ -142,14 +142,21 @@ class UrbanWind:
                 (1 - az) * bil(self.v, k) + az * bil(self.v, k + 1))
 
 
-def solve_urban_wind(grid: dict, z_levels, p: WindParams) -> UrbanWind:
-    """grid: dict with H, x0, y0, res (from GeoCorridor.grid)."""
+def solve_urban_wind(grid: dict, z_levels, p: WindParams, layer_winds=None) -> UrbanWind:
+    """grid: dict with H, x0, y0, res (from GeoCorridor.grid).
+
+    ``layer_winds`` optionally gives the background (speed m/s, toward-deg relative to the
+    corridor) per level, e.g. from :func:`aamsim.weather.layer_winds`; otherwise the
+    power-law profile of ``p`` is used."""
     H = grid["H"]
     zs = np.array([max(float(z), 10.0) for z in z_levels])
     us, vs = [], []
-    th = math.radians(p.direction_deg)
-    for z in zs:
-        s = layer_speed(p, z)
+    for k, z in enumerate(zs):
+        if layer_winds is not None:
+            s, d = layer_winds[k]
+        else:
+            s, d = layer_speed(p, z), p.direction_deg
+        th = math.radians(d)
         ux, uy = s * math.cos(th), s * math.sin(th)
         u, v = solve_layer(H >= z, grid["res"], grid["x0"], grid["y0"], ux, uy, p)
         us.append(u); vs.append(v)

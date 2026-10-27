@@ -1,0 +1,775 @@
+<title>AAM Corridor Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: research console over a 3D city. Top bar = area + the three papers; left = the selected
+   paper's design and experiment controls; right drawer = experiment results with the paper's own values. */
+:root {
+  --sky: #eef1f3; --ground: #e1e5e8; --bldg: #f8f9fa; --road: #c6ccd2; --road-major: #a8b1b9;
+  --panel: #fffffff0; --ink: #16202a; --ink-2: #4b5764; --ink-3: #7c8893; --rule: #dce1e5;
+  --accent: #b5267f; --accent-soft: #b5267f1f; --lattice: #b5267f;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #c98500; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --good: #1f8a4c; --bad: #d23b3b; --warn: #b7791f;
+  --w-lo: #a8d996; --w-mid: #2f9e98; --w-hi: #3346b0;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --sky: #10161c; --ground: #19212a; --bldg: #8d98a3; --road: #2c3640; --road-major: #3c4854;
+  --panel: #151c23f2; --ink: #e7ecf0; --ink-2: #a9b4be; --ink-3: #76828d; --rule: #29333d;
+  --accent: #e05aa9; --accent-soft: #e05aa926; --lattice: #e05aa9;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #2c9a2c; --s7: #9085e9; --s8: #e66767;
+  --good: #44b874; --bad: #ef6a6a; --warn: #d9a441; --w-lo: #4e7a40; --w-mid: #2f8f8a; --w-hi: #8090f0; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --sky: #10161c; --ground: #19212a; --bldg: #8d98a3; --road: #2c3640; --road-major: #3c4854;
+  --panel: #151c23f2; --ink: #e7ecf0; --ink-2: #a9b4be; --ink-3: #76828d; --rule: #29333d;
+  --accent: #e05aa9; --accent-soft: #e05aa926; --lattice: #e05aa9;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #2c9a2c; --s7: #9085e9; --s8: #e66767;
+  --good: #44b874; --bad: #ef6a6a; --warn: #d9a441; --w-lo: #4e7a40; --w-mid: #2f8f8a; --w-hi: #8090f0; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--sky); color: var(--ink); font: 13px var(--font-body); overflow: hidden; }
+#stage { position: fixed; inset: 0; }
+.bar { position: fixed; z-index: 6; top: max(10px, env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; pointer-events: none; }
+.bar > * { pointer-events: auto; }
+.brand { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 7px 12px; }
+.brand b { font: 700 20px/1 var(--font-display); letter-spacing: .02em; }
+.brand span { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 2px; }
+.tabs { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 4px; }
+.tabs button { border: 0; background: transparent; color: var(--ink-2); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: left; font: 600 15px/1.05 var(--font-display); letter-spacing: .02em; }
+.tabs button small { display: block; font: 400 10.5px var(--font-body); color: var(--ink-3); letter-spacing: 0; }
+.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+.area { margin-left: auto; display: flex; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 5px 8px; flex-wrap: wrap; }
+.area label { font-size: 11.5px; color: var(--ink-2); display: flex; gap: 5px; align-items: center; }
+#panel, #drawer { position: fixed; z-index: 5; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; box-shadow: 0 6px 30px #0000001c;
+  overflow-y: auto; overscroll-behavior: contain; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+#panel { top: 86px; left: max(10px, env(safe-area-inset-left, 0px)); width: min(360px, calc(100vw - 20px)); bottom: max(10px, env(safe-area-inset-bottom, 0px)); }
+#drawer { top: 86px; right: max(10px, env(safe-area-inset-right, 0px)); width: min(440px, calc(100vw - 20px)); max-height: calc(100% - 96px); }
+#drawer.min { width: auto; }
+#drawer.min > :not(.dhead) { display: none; }
+.dhead { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--rule); gap: 8px; }
+.dhead b { font: 600 16px var(--font-display); letter-spacing: .03em; }
+section.sec { padding: 10px 13px 12px; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+section.sec:last-child { border-bottom: 0; }
+h3 { margin: 0; font-size: 12.5px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+h3 span { font-weight: 400; color: var(--ink-3); font-size: 11px; text-align: right; }
+.row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; align-items: center; color: var(--ink-2); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.row2 label, .row3 label { display: grid; gap: 2px; font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px; }
+select, input[type="number"] { font: 12.5px var(--font-body); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 7px; padding: 5px 6px; width: 100%; min-width: 0; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.seg { display: flex; background: var(--rule); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font: 500 12px var(--font-body); padding: 5px 4px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px #0002; }
+.btn { border: 1px solid var(--rule); background: transparent; color: var(--ink); font: 500 12px var(--font-body); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font: 600 14px var(--font-display); letter-spacing: .04em; }
+.btn[aria-pressed="true"] { border-color: var(--ink); }
+.btns { display: flex; flex-wrap: wrap; gap: 5px; }
+.note { font-size: 11px; color: var(--ink-3); line-height: 1.45; margin: 0; }
+.note code, .eq { font-family: var(--font-mono); font-size: 10.5px; }
+.eq { background: var(--accent-soft); border-radius: 6px; padding: 6px 8px; color: var(--ink-2); line-height: 1.55; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.kpi { border-left: 2px solid var(--rule); padding-left: 7px; min-width: 0; }
+.kpi .k { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.kpi .v { font-family: var(--font-mono); font-size: 16px; font-variant-numeric: tabular-nums; }
+.kpi .r { font-size: 10px; color: var(--ink-3); }
+.kpi.hot { border-left-color: var(--accent); }
+table { width: 100%; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--ink-3); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+td:first-child, th:first-child { text-align: left; }
+td.m { font-family: var(--font-mono); }
+td.ok { color: var(--good); } td.off { color: var(--warn); }
+tr.sel td { background: var(--accent-soft); }
+tr.click { cursor: pointer; }
+.tw { overflow-x: auto; }
+canvas.chart { width: 100%; height: 170px; display: block; }
+.sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; vertical-align: -1px; margin-right: 4px; }
+.prog { height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+.prog i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.pin { position: fixed; transform: translate(-50%, -100%); pointer-events: none; z-index: 3; text-align: center; }
+.pin .b { font: 600 15px var(--font-display); background: var(--panel); color: var(--ink); border: 2px solid var(--ink); border-radius: 18px; padding: 2px 10px; white-space: nowrap; }
+.pin .s { width: 2px; height: 34px; background: var(--ink); margin: 0 auto; }
+.pin.g .b { background: var(--ink); color: var(--panel); }
+.toast { position: fixed; z-index: 7; left: 50%; transform: translateX(-50%); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--panel); padding: 7px 12px; border-radius: 8px; font-size: 12px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 80vw; }
+.toast.on { opacity: 1; }
+.legend { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom, 0px)); background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 5px 10px; font-size: 11px; color: var(--ink-2); display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 820px); }
+.legend a { color: var(--ink-2); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fallback { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
+@media (max-width: 1100px) { #drawer { top: auto; bottom: max(10px, env(safe-area-inset-bottom, 0px)); max-height: 42%; } .legend { display: none; } }
+@media (max-width: 700px) { #panel { top: auto; height: 46%; } #drawer { display: none; } .area { margin-left: 0; } }
+</style>
+
+<div id="stage"></div>
+<div class="pin" id="pinA"><div class="b">Start ○</div><div class="s"></div></div>
+<div class="pin g" id="pinB"><div class="b">Goal ⚑</div><div class="s"></div></div>
+
+<div class="bar">
+  <div class="brand"><b>AAM Corridor Lab</b><span id="areaname"></span></div>
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" type="button" data-t="p1" aria-selected="true">1 · Wind-aware routing<small>TRR · Exps 6.2–6.5</small></button>
+    <button role="tab" type="button" data-t="p2" aria-selected="false">2 · Airspace configuration<small>TRB · SIRE · Exps 1–4</small></button>
+    <button role="tab" type="button" data-t="p3" aria-selected="false">3 · Rolling horizon<small>Priority ILP · FCFS · offline</small></button>
+  </nav>
+  <div class="area">
+    <label>Buildings <span class="seg" style="min-width:150px"><button type="button" id="bld-on" aria-pressed="true">City</button><button type="button" id="bld-off" aria-pressed="false">Open field</button></span></label>
+    <button class="btn" type="button" id="place">Place Start/Goal</button>
+    <label class="btn" for="osmfile" style="cursor:pointer">Load .osm area<input type="file" id="osmfile" accept=".osm,.xml" hidden></label>
+  </div>
+</div>
+
+<aside id="panel" aria-label="Experiment controls"></aside>
+<aside id="drawer" aria-label="Experiment results"><div class="dhead"><b id="dtitle">Results</b><button class="btn" type="button" id="dmin">Hide</button></div><div id="dbody"></div></aside>
+<div class="legend" id="legend"></div>
+<div class="toast" id="toast"></div>
+
+<script>/*__ENGINE__*/</script>
+<script>const DATA=/*__DATA__*/null; const ENGINE_SRC=/*__ENGINE_SRC__*/"";</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const G = window.LabEngine, FT = G.FT;
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const SER = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+const mean = (a) => { const f = a.filter((x) => isFinite(x)); return f.length ? f.reduce((p, q) => p + q, 0) / f.length : NaN; };
+const fmt = (x, d = 1) => (x == null || !isFinite(x)) ? "–" : Number(x).toFixed(d);
+const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 3200); };
+if (!window.THREE || !DATA) { document.body.insertAdjacentHTML("beforeend", '<div class="fallback">The lab needs three.js from cdnjs and jsDelivr. Check the connection and reload.</div>'); return; }
+
+// ===================================================================== state
+const PRESETS = {
+  trr:  { name: "TRR paper: 6,000 ft blocks", mlen: 6000, mwid: 100, nlat: 2, z: [0, 200, 300, 400], vert: false, len: 30000, depth: 1 },
+  trb:  { name: "TRB paper: 1,000 × 200 × 100 ft", mlen: 1000, mwid: 200, nlat: 2, z: [0, 100, 200, 300, 400], vert: false, len: 30000, depth: 1 },
+  city: { name: "City: 500 × 160 × 100 ft", mlen: 500, mwid: 160, nlat: 6, z: [0, 100, 200, 300, 400], vert: true, len: null, depth: 2 },
+};
+const S = {
+  tab: "p1", city: { name: DATA.city.name, origin: DATA.city.origin, buildings: DATA.city.buildings, roads: DATA.city.roads },
+  buildingsOn: true, start: DATA.city.start_en.slice(), goal: DATA.city.goal_en.slice(),
+  design: Object.assign({}, PRESETS.city, { preset: "city", usePaperLength: false, clearance: 25 }),
+  veh: { cruise_mph: 35, energy_j_per_ft: 20.42, phase_dependent: false, k_climb: 0.2, alpha_desc: 1, takeoff_fraction: 0.1 },
+  C: null, wind: null, urban: null, weather: DATA.weather, p1: { exp: "urban", dir: 0, trend: "calm_to_strong", dep: 0, oLane: 0, dLane: 0, sel: 0, bg: { speed: 4, dir: 0 } },
+  p2: { D: 600, ops: 3, share: 1, rule: "undirected", win: 60, pattern: "uniform", tie: "operator", slot: 60, windLinks: false },
+  p3: { case: 0, method: 1 }, anim: { t: 0, playing: false, rate: 1, tmax: 1 },
+};
+
+// ===================================================================== 3D scene (east-north metres -> three: x, z_up, -y)
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); $("stage").appendChild(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, 5, 60000);
+const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa3ab, 0.78)); const sun = new THREE.DirectionalLight(0xffffff, 0.72); sun.position.set(-800, 1500, 600); scene.add(sun);
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); camera.aspect = w / h; const off = w > 1100 ? -40 : 0; if (off) camera.setViewOffset(w, h, off, 0, w, h); else camera.clearViewOffset(); camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+const V = (e, n, z) => new THREE.Vector3(e, z, -n);
+const col = (n) => new THREE.Color(css(n));
+const groups = {};
+function group(name) { const old = groups[name]; if (old) { scene.remove(old); old.traverse((o) => { o.geometry && o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); }); } const g = new THREE.Group(); groups[name] = g; scene.add(g); return g; }
+// corridor frame -> EN
+let F = null;
+const cEN = (x, y) => G.toEN(F, x, y);
+const nodeV = (n, lift = 0) => { const p = S.C.pos[n], e = cEN(p[0], p[1]); return V(e[0], e[1], Math.max(p[2], 1.5) + lift); };
+
+function drawCity() {
+  scene.background = col("--sky");
+  const g = group("city");
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshLambertMaterial({ color: col("--ground") }));
+  plate.rotation.x = -Math.PI / 2; plate.position.y = -0.6; g.add(plate);
+  if (!S.buildingsOn) return;
+  const mn = [], mj = [];
+  for (const r of S.city.roads) { const a = r.M ? mj : mn, p = r.p; for (let k = 0; k + 3 < p.length; k += 2) a.push(p[k], 0.2, -p[k + 1], p[k + 2], 0.2, -p[k + 3]); }
+  for (const [a, c] of [[mn, "--road"], [mj, "--road-major"]]) { const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(a, 3)); g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col(c) }))); }
+  const geos = [];
+  for (const b of S.city.buildings) {
+    const p = b.p, sh = new THREE.Shape(); sh.moveTo(p[0], p[1]); for (let k = 2; k < p.length; k += 2) sh.lineTo(p[k], p[k + 1]);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: Math.max(1, b.h), bevelEnabled: false }); geo.rotateX(-Math.PI / 2); geo.deleteAttribute("uv"); geos.push(geo.index ? geo.toNonIndexed() : geo);
+  }
+  if (geos.length) { const m = THREE.BufferGeometryUtils.mergeBufferGeometries(geos, false); geos.forEach((x) => x.dispose());
+    g.add(new THREE.Mesh(m, new THREE.MeshLambertMaterial({ color: col("--bldg") })));
+    g.add(new THREE.LineSegments(new THREE.EdgesGeometry(m, 30), new THREE.LineBasicMaterial({ color: col("--road-major"), transparent: true, opacity: 0.35 }))); }
+}
+function drawLattice() {
+  const g = group("lattice"), C = S.C, v = [];
+  for (const [a, b] of C.edges) { const p = nodeV(a, 0), q = nodeV(b, 0); v.push(p.x, p.y, p.z, q.x, q.y, q.z); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+  g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--lattice"), transparent: true, opacity: C.pos.length > 600 ? 0.1 : 0.2 })));
+  for (const n of [...C.origins, ...C.destinations]) { const m = new THREE.Mesh(new THREE.CylinderGeometry(Math.max(6, C.W * 0.18), Math.max(6, C.W * 0.18), 1, 20), new THREE.MeshBasicMaterial({ color: col("--lattice"), transparent: true, opacity: 0.45 })); m.position.copy(nodeV(n, -1)); m.position.y = 0.5; g.add(m); }
+}
+function frameCamera() {
+  const C = S.C, a = cEN(0, 0), b = cEN(C.L, 0), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], L = C.L;
+  const back = cEN(-0.25 * L, -0.55 * L);
+  controls.target.copy(V(mid[0], mid[1], 20)); camera.position.copy(V(back[0], back[1], 0.55 * L + 250));
+}
+// ---------- drones
+function makeDrone(c, s) {
+  const g = new THREE.Group(), m = () => new THREE.MeshLambertMaterial({ color: col(c) });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), m()); body.scale.set(1.5 * s, 0.55 * s, 1.1 * s); g.add(body);
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(5.2 * s, 0.25 * s, 0.35 * s), m()); arm.rotation.y = a; g.add(arm); }
+  g.rotors = [];
+  for (const [x, z] of [[1.85, 1.85], [-1.85, 1.85], [1.85, -1.85], [-1.85, -1.85]]) { const r = new THREE.Group(); r.position.set(x * s, 0.6 * s, z * s);
+    r.add(new THREE.Mesh(new THREE.CylinderGeometry(1.3 * s, 1.3 * s, 0.05 * s, 24), new THREE.MeshBasicMaterial({ color: col(c), transparent: true, opacity: 0.28 })));
+    r.add(new THREE.Mesh(new THREE.BoxGeometry(2.5 * s, 0.06 * s, 0.22 * s), m())); g.add(r); g.rotors.push(r); }
+  return g;
+}
+function droneGeo(s) { const parts = []; const body = new THREE.SphereGeometry(1, 12, 8); body.scale(1.5, 0.55, 1.1); parts.push(body);
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) { const arm = new THREE.BoxGeometry(5.2, 0.25, 0.35); arm.rotateY(a); parts.push(arm); }
+  for (const [x, z] of [[1.85, 1.85], [-1.85, 1.85], [1.85, -1.85], [-1.85, -1.85]]) { const r = new THREE.CylinderGeometry(1.25, 1.25, 0.1, 16); r.translate(x, 0.6, z); parts.push(r); }
+  const n = parts.map((p) => { const q = p.index ? p.toNonIndexed() : p; q.deleteAttribute("uv"); return q; }); const m = THREE.BufferGeometryUtils.mergeBufferGeometries(n, false); m.scale(s, s, s); return m; }
+const droneScale = () => Math.max(4, Math.min(16, S.C.L / 260));
+
+// ---------- wind display: node arrows (paper fields) or particles (grid fields)
+function drawWindArrows(wind, bin = 0) {
+  const g = group("wind"); if (!wind) return; const w = wind.bins[Math.min(bin, wind.bins.length - 1)], C = S.C, v = [];
+  const c = Math.cos(F.b), s = Math.sin(F.b), scale = Math.max(4, C.W * 0.7) / 30;
+  C.pos.forEach((p, n) => { if (p[2] <= 0) return; const u = w.u[n], vv = w.v[n], sp = Math.hypot(u, vv); if (sp < 0.3) return;
+    const de = u * c - vv * s, dn = u * s + vv * c, len = Math.min(C.ML * 0.45, 8 + sp * scale * 3), ux = de / sp, uy = dn / sp, P = nodeV(n);
+    const x2 = P.x + ux * len, z2 = P.z - uy * len; v.push(P.x, P.y, P.z, x2, P.y, z2);
+    const hx = -ux * len * 0.25, hz = uy * len * 0.25; v.push(x2, P.y, z2, x2 + hx + uy * len * 0.12, P.y, z2 + hz + ux * len * 0.12, x2, P.y, z2, x2 + hx - uy * len * 0.12, P.y, z2 + hz - ux * len * 0.12); });
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+  g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--w-mid") })));
+}
+const PART = { n: 2600, trail: 10, on: false, z: 60 };
+function initParticles() {
+  const g = group("particles"); PART.pos = new Float32Array(PART.n * PART.trail * 2); PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
+  PART.seg = new Float32Array(PART.n * (PART.trail - 1) * 6); PART.col = new Float32Array(PART.n * (PART.trail - 1) * 6);
+  PART.geo = new THREE.BufferGeometry(); PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3));
+  PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true })); g.add(PART.mesh); PART.mesh.visible = false;
+}
+function solid(x, y, z) { const gr = S.C.grid; if (!gr) return false; const i = Math.floor((x - gr.x0) / gr.res), j = Math.floor((y - gr.y0) / gr.res); if (i < 0 || j < 0 || i >= gr.nx || j >= gr.ny) return true; return gr.H[i * gr.ny + j] >= z; }
+function spawn(i) { const W = S.urban; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solid(x, y, PART.z) && k < 20);
+  for (let t = 0; t < PART.trail; t++) { PART.pos[(i * PART.trail + t) * 2] = x; PART.pos[(i * PART.trail + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = 0; }
+const tmp2 = [0, 0];
+function stepParticles(dt) {
+  if (!PART.on || !S.urban) { if (PART.mesh) PART.mesh.visible = false; return; }
+  PART.mesh.visible = true; const T = PART.trail, bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(1, S.urbanMax || 6) * 1.2;
+  for (let i = 0; i < PART.n; i++) {
+    PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i]) spawn(i);
+    const b = i * T * 2;
+    for (let k = T - 1; k > 0; k--) { PART.pos[b + k * 2] = PART.pos[b + (k - 1) * 2]; PART.pos[b + k * 2 + 1] = PART.pos[b + (k - 1) * 2 + 1]; }
+    G.sample(S.urban, PART.pos[b], PART.pos[b + 1], PART.z, tmp2); PART.pos[b] += tmp2[0] * dt * 26; PART.pos[b + 1] += tmp2[1] * dt * 26;
+    if (solid(PART.pos[b], PART.pos[b + 1], PART.z)) spawn(i);
+    const f0 = Math.min(1, Math.hypot(tmp2[0], tmp2[1]) / vmax), c = f0 < 0.5 ? ramp[0].clone().lerp(ramp[1], f0 * 2) : ramp[1].clone().lerp(ramp[2], (f0 - 0.5) * 2);
+    for (let k = 0; k < T - 1; k++) { const s = (i * (T - 1) + k) * 6, e0 = cEN(PART.pos[b + k * 2], PART.pos[b + k * 2 + 1]), e1 = cEN(PART.pos[b + (k + 1) * 2], PART.pos[b + (k + 1) * 2 + 1]);
+      PART.seg[s] = e0[0]; PART.seg[s + 1] = PART.z; PART.seg[s + 2] = -e0[1]; PART.seg[s + 3] = e1[0]; PART.seg[s + 4] = PART.z; PART.seg[s + 5] = -e1[1];
+      const cc = bg.clone().lerp(c, 0.3 + 0.7 * (1 - k / (T - 1)) * Math.min(1, PART.age[i] * 2)); PART.col.set([cc.r, cc.g, cc.b, cc.r, cc.g, cc.b], s); }
+  }
+  PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true;
+}
+
+// ===================================================================== corridor build
+function buildingsCorr() {   // buildings in corridor frame, only near the corridor
+  if (!S.buildingsOn) return null; const out = [], L = F.L, pad = 400;
+  for (const b of S.city.buildings) { const p = b.p, q = new Array(p.length); let cx = 0, cy = 0;
+    for (let k = 0; k < p.length; k += 2) { const c = G.toCorr(F, p[k], p[k + 1]); q[k] = c[0]; q[k + 1] = c[1]; cx += c[0]; cy += c[1]; }
+    cx /= p.length / 2; cy /= p.length / 2; if (cx > -pad && cx < L + pad && Math.abs(cy) < pad + 400) out.push({ p: q, h: b.h }); }
+  return out;
+}
+function rebuild() {
+  const d = S.design;
+  let goal = S.goal;
+  if (d.usePaperLength && d.len) { const dx = S.goal[0] - S.start[0], dy = S.goal[1] - S.start[1], l = Math.hypot(dx, dy) || 1, Lm = d.len / FT; goal = [S.start[0] + dx / l * Lm, S.start[1] + dy / l * Lm]; }
+  F = G.corridorFrame(S.start, goal);
+  const spec = { L: F.L, module_length: d.mlen / FT, module_width: d.mwid / FT, n_lat: d.nlat, z_levels: d.z.map((z) => z / FT), vertical_ground_only: d.vert, clearance: d.clearance / FT, res: 10, margin: 200, portal_depth: d.depth };
+  S.spec = spec; S.C = G.buildCorridor(spec, buildingsCorr());
+  if (!S.C.origins.length || !S.C.destinations.length) toast("No open launch pad at one end: move Start/Goal or switch to open field.");
+  drawLattice(); placePins(); updateAreaName();
+  S.urban = null;
+}
+function placePins() { S.pinA = V(F.s[0], F.s[1], 0); const e = cEN(S.C.L, 0); S.pinB = V(e[0], e[1], 0); }
+function projectPins() { for (const [id, v] of [["pinA", S.pinA], ["pinB", S.pinB]]) { if (!v) continue; const p = v.clone().project(camera), el = $(id), vis = p.z < 1 && Math.abs(p.x) < 1.1 && Math.abs(p.y) < 1.1 && S.tab !== "p3";
+  el.style.display = vis ? "block" : "none"; el.style.left = `${(p.x + 1) / 2 * innerWidth}px`; el.style.top = `${(1 - p.y) / 2 * innerHeight}px`; } }
+function updateAreaName() { const C = S.C; $("areaname").textContent = `${S.city.name} · corridor ${(C.L * FT / 5280).toFixed(2)} mi · ${C.pos.length} nodes · ${C.edges.length} links${S.buildingsOn ? ` · ${C.removed_links} blocked by buildings` : " · open field"}`; }
+
+// ===================================================================== shared UI pieces
+function designSection(note) {
+  const d = S.design, pr = Object.entries(PRESETS).map(([k, p]) => `<option value="${k}"${d.preset === k ? " selected" : ""}>${p.name}</option>`).join("");
+  note = d.preset === "custom" ? "custom" : (PRESETS[d.preset] || {}).name || note;
+  return `<section class="sec"><h3>Corridor design <span>${note || "modular prism lattice"}</span></h3>
+    <div class="row">Preset <select id="d-preset">${pr}<option value="custom"${d.preset === "custom" ? " selected" : ""}>Custom</option></select></div>
+    <div class="row3"><label>Module length (ft)<input type="number" id="d-mlen" min="100" step="100" value="${d.mlen}"></label>
+      <label>Module width (ft)<input type="number" id="d-mwid" min="50" step="10" value="${d.mwid}"></label>
+      <label>Lateral N<sub>W</sub><input type="number" id="d-nlat" min="1" max="10" value="${d.nlat}"></label></div>
+    <div class="row3"><label>Layers N<sub>H</sub><input type="number" id="d-nh" min="1" max="8" value="${d.z.length - 1}"></label>
+      <label>Ceiling (ft)<input type="number" id="d-ceil" min="100" max="400" step="10" value="${d.z[d.z.length - 1]}"></label>
+      <label>Clearance (ft)<input type="number" id="d-clr" min="0" max="100" step="5" value="${d.clearance}"></label></div>
+    <div class="row">Take-off <div class="seg"><button type="button" id="d-vert0" aria-pressed="${!d.vert}">Diagonal (papers)</button><button type="button" id="d-vert1" aria-pressed="${d.vert}">Vertical only</button></div></div>
+    <div class="row">Length <div class="seg"><button type="button" id="d-len1" aria-pressed="${!!(d.usePaperLength && d.len)}"${d.len ? "" : " disabled"}>Paper ${d.len ? (d.len / 1000).toFixed(0) + "k ft" : ""}</button><button type="button" id="d-len0" aria-pressed="${!(d.usePaperLength && d.len)}">Start → Goal</button></div></div>
+  </section>`;
+}
+function wireDesign(after) {
+  const d = S.design, re = () => { rebuild(); after(); };
+  $("d-preset").onchange = (e) => { const k = e.target.value; if (PRESETS[k]) Object.assign(d, PRESETS[k], { preset: k, usePaperLength: !!PRESETS[k].len }); renderPanel(); re(); };
+  const num = (id, f) => { $(id).onchange = (e) => { f(+e.target.value); d.preset = "custom"; re(); }; };
+  num("d-mlen", (v) => d.mlen = Math.max(100, v)); num("d-mwid", (v) => d.mwid = Math.max(50, v)); num("d-nlat", (v) => d.nlat = Math.min(10, Math.max(1, v | 0)));
+  num("d-clr", (v) => d.clearance = Math.max(0, v));
+  const layers = () => { const nh = Math.min(8, Math.max(1, +$("d-nh").value | 0)), ceil = Math.min(400, Math.max(100, +$("d-ceil").value)); const first = d.preset === "trr" ? 200 : ceil / nh;
+    d.z = [0]; if (d.preset === "trr" && nh === 3) d.z = [0, 200, 300, 400]; else for (let k = 1; k <= nh; k++) d.z.push(Math.round(k * ceil / nh)); d.preset = "custom"; re(); };
+  $("d-nh").onchange = layers; $("d-ceil").onchange = layers;
+  $("d-vert0").onclick = () => { d.vert = false; renderPanel(); re(); }; $("d-vert1").onclick = () => { d.vert = true; renderPanel(); re(); };
+  $("d-len1").onclick = () => { d.usePaperLength = true; renderPanel(); re(); }; $("d-len0").onclick = () => { d.usePaperLength = false; renderPanel(); re(); };
+}
+function kpiHTML(list) { return `<div class="kpis">${list.map((k) => `<div class="kpi${k.hot ? " hot" : ""}"><div class="k">${k.k}</div><div class="v">${k.v}</div>${k.r ? `<div class="r">${k.r}</div>` : ""}</div>`).join("")}</div>`; }
+function chart(canvas, series, o) {   // series: [{name, color, pts:[[x,y]...], dash}]
+  const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  const ctx = canvas.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, r.width, r.height);
+  let xs = [], ys = []; series.forEach((s) => s.pts.forEach(([x, y]) => { if (isFinite(x) && isFinite(y)) { xs.push(x); ys.push(y); } })); if (!xs.length) return;
+  let x0 = o.xmin ?? Math.min(...xs), x1 = o.xmax ?? Math.max(...xs), y0 = o.ymin ?? Math.min(...ys), y1 = o.ymax ?? Math.max(...ys);
+  if (x1 - x0 < 1e-9) { const p = Math.max(Math.abs(x0) * 0.1, 1e-3); x1 += p; x0 -= p; } if (y1 - y0 < 1e-9) { const p = Math.max(Math.abs(y0) * 0.1, 1e-3); y1 += p; y0 -= p; } const py = (y1 - y0) * 0.06; if (o.ymin == null) y0 -= py; if (o.ymax == null) y1 += py;
+  const m = { l: 40, r: 8, t: 12, b: 26 }, w = r.width, h = r.height, X = (x) => m.l + (x - x0) / (x1 - x0) * (w - m.l - m.r), Y = (y) => h - m.b - (y - y0) / (y1 - y0) * (h - m.t - m.b);
+  ctx.font = `10px ${css("--font-mono")}`; ctx.strokeStyle = css("--rule"); ctx.fillStyle = css("--ink-3"); ctx.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) { const v = y0 + (y1 - y0) * k / 4; ctx.beginPath(); ctx.moveTo(m.l, Y(v)); ctx.lineTo(w - m.r, Y(v)); ctx.stroke(); ctx.textAlign = "right"; ctx.fillText(Math.abs(y1 - y0) >= 10 ? v.toFixed(0) : v.toFixed(2), m.l - 4, Y(v) + 3); }
+  for (let k = 0; k <= 4; k++) { const v = x0 + (x1 - x0) * k / 4; ctx.textAlign = "center"; ctx.fillText(Math.abs(x1 - x0) >= 10 ? v.toFixed(0) : v.toFixed(1), X(v), h - m.b + 12); }
+  ctx.fillStyle = css("--ink-2"); ctx.font = `10.5px ${css("--font-body")}`; ctx.textAlign = "center"; ctx.fillText(o.xlab || "", m.l + (w - m.l - m.r) / 2, h - 2); ctx.textAlign = "left"; ctx.fillText(o.ylab || "", 2, 9);
+  for (const s of series) { if (s.width === 0) continue; ctx.strokeStyle = css(s.color); ctx.fillStyle = css(s.color); ctx.lineWidth = s.width || 2; ctx.setLineDash(s.dash ? [5, 4] : []);
+    if (!s.dots) { ctx.beginPath(); s.pts.forEach(([x, y], i) => { if (!isFinite(y)) return; i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)); }); ctx.stroke(); }
+    ctx.setLineDash([]); if (s.dots || s.marks) s.pts.forEach(([x, y]) => { if (!isFinite(y)) return; ctx.beginPath(); ctx.arc(X(x), Y(y), s.r || 3.5, 0, 7); s.hollow ? ctx.stroke() : ctx.fill(); }); }
+  if (o.vline != null) { ctx.strokeStyle = css("--accent"); ctx.beginPath(); ctx.moveTo(X(o.vline), m.t); ctx.lineTo(X(o.vline), h - m.b); ctx.stroke(); }
+  return { X, Y };
+}
+function legend(items) { $("legend").innerHTML = items.map((i) => `<span><span class="sw" style="background:var(${i.c})"></span>${i.t}</span>`).join("") + ` <span>Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</span>`; }
+function drawer(title, html) { $("dtitle").textContent = title; $("dbody").innerHTML = html; $("drawer").classList.remove("min"); $("dmin").textContent = "Hide"; }
+
+// ===================================================================== weather
+function weatherLayers(z_levels_m) {   // per level [speed m/s, toward deg relative to corridor]
+  const P = S.weather, bear = F.b * 180 / Math.PI;
+  return z_levels_m.map((z) => { const zz = Math.max(z, 10), h = P.heights_m, s = P.speed_ms, d = P.dir_from_deg; let sp, df;
+    if (zz <= h[0]) { sp = s[0] * Math.pow(zz / h[0], 0.25); df = d[0]; } else if (zz >= h[h.length - 1]) { sp = s[s.length - 1]; df = d[d.length - 1]; }
+    else { let k = 0; while (h[k + 1] < zz) k++; const f = (Math.log(zz) - Math.log(h[k])) / (Math.log(h[k + 1]) - Math.log(h[k])); sp = s[k] + f * (s[k + 1] - s[k]);
+      const u = (1 - f) * Math.sin(d[k] * Math.PI / 180) + f * Math.sin(d[k + 1] * Math.PI / 180), v = (1 - f) * Math.cos(d[k] * Math.PI / 180) + f * Math.cos(d[k + 1] * Math.PI / 180); df = (Math.atan2(u, v) * 180 / Math.PI + 360) % 360; }
+    const towardMath = 90 - ((df + 180) % 360); return [sp, ((towardMath - bear) % 360 + 360) % 360]; });
+}
+async function fetchWeather() {
+  const [lat, lon] = S.city.origin;
+  const q = `latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&wind_speed_unit=ms&forecast_days=1&timezone=UTC&current=wind_speed_10m&hourly=wind_speed_10m,wind_speed_80m,wind_speed_120m,wind_speed_180m,wind_direction_10m,wind_direction_80m,wind_direction_120m,wind_direction_180m`;
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`); const d = await r.json(); if (d.error) throw new Error(d.reason);
+    const now = (d.current && d.current.time || d.hourly.time[0]).slice(0, 13); let i = d.hourly.time.findIndex((t) => t.slice(0, 13) === now); if (i < 0) i = 0;
+    const H = [10, 80, 120, 180]; S.weather = { source: "Open-Meteo (live)", time: d.hourly.time[i] + "Z", lat, lon, heights_m: H, speed_ms: H.map((h) => d.hourly[`wind_speed_${h}m`][i]), dir_from_deg: H.map((h) => d.hourly[`wind_direction_${h}m`][i]) };
+    toast("Live wind loaded from Open-Meteo"); return true;
+  } catch (e) { toast("Live fetch is blocked in the published page; using the snapshot taken at build time. Open demo/lab.html locally for live wind."); return false; }
+}
+function weatherTable() { const P = S.weather; return `<table><thead><tr><th>Height</th><th>Speed</th><th>From</th></tr></thead><tbody>${P.heights_m.map((h, k) => `<tr><td>${h} m (${Math.round(h * FT)} ft)</td><td class="m">${fmt(P.speed_ms[k], 1)} m/s · ${fmt(P.speed_ms[k] * 2.237, 0)} mph</td><td class="m">${Math.round(P.dir_from_deg[k])}°</td></tr>`).join("")}</tbody></table><p class="note">${P.source}, ${P.time}</p>`; }
+
+// ===================================================================== PAPER 1: wind-aware Pareto routing
+const P1REF = DATA.ref.trr;
+const P1 = {
+  wind() {
+    const s = S.p1, C = S.C;
+    if (s.exp === "none") return G.windNone(C);
+    if (s.exp === "shear") return G.windShear(C, s.dir);
+    if (s.exp === "spatial") return G.windSpatial(C, s.dir);
+    if (s.exp === "temporal") return G.windTemporal(C, s.dir, s.trend);
+    if (s.exp === "urban" || s.exp === "weather") {
+      if (!C.grid) { // open field: background profile only
+        const lay = s.exp === "weather" ? weatherLayers(C.z_levels) : C.z_levels.map((z) => [G.layerSpeed(Object.assign({}, DATA.windp, { speed_ms: s.bg.speed }), z), s.bg.dir]);
+        return { bins: [(() => { const u = new Float64Array(C.pos.length), v = new Float64Array(C.pos.length); C.pos.forEach((p, n) => { const k = C.z_levels.indexOf(p[2]); const [sp, d] = lay[Math.max(0, k)]; u[n] = sp * G.MPH_PER_MS * Math.cos(d * Math.PI / 180); v[n] = sp * G.MPH_PER_MS * Math.sin(d * Math.PI / 180); }); return { u, v }; })()], bin_sec: 3600, name: s.exp };
+      }
+      const p = Object.assign({}, DATA.windp, { speed_ms: s.bg.speed, direction_deg: s.bg.dir });
+      S.urban = G.solveUrban(C.grid, C.z_levels, p, s.exp === "weather" ? weatherLayers(C.z_levels) : null);
+      S.urbanMax = s.exp === "weather" ? Math.max(...S.weather.speed_ms) : s.bg.speed * 1.3;
+      return G.windFromUrban(C, S.urban);
+    }
+  },
+  od() { const C = S.C, s = S.p1; const pick = (list, lane) => list.slice().sort((a, b) => Math.abs(C.ijk[a][1] - lane) - Math.abs(C.ijk[b][1] - lane) || Math.abs(C.pos[a][0] - (list === C.origins ? 0 : C.L)) - Math.abs(C.pos[b][0] - (list === C.origins ? 0 : C.L)))[0];
+    return [pick(C.origins, s.oLane), pick(C.destinations, s.dLane)]; },
+  run() {
+    const C = S.C, s = S.p1; if (!C.origins.length || !C.destinations.length) return;
+    const t0 = performance.now(); S.wind = this.wind(); const costs = G.linkCosts(C, S.wind, S.veh), [o, d] = this.od();
+    const res = G.pareto(C, costs, S.wind, S.veh, o, d, { depart: s.exp === "temporal" ? s.dep * 180 : 0, horizon: 3600 });
+    const base = G.pareto(C, G.linkCosts(C, G.windNone(C), S.veh), G.windNone(C), S.veh, o, d).routes[0];
+    if (!res.routes.length || !base) { group("routes"); $("p1-kpis").innerHTML = '<p class="note">No feasible route between these launch pads: buildings block every path. Move Start/Goal, add lanes, lower the clearance, or switch to Open field.</p>'; return; }
+    S.p1.res = res; S.p1.base = base; S.p1.ms = performance.now() - t0; S.p1.sel = Math.min(S.p1.sel, Math.max(0, res.routes.length - 1));
+    PART.on = !!S.urban; PART.z = C.z_levels[Math.min(2, C.z_levels.length - 1)] || 60; if (!S.urban) drawWindArrows(S.wind, s.exp === "temporal" ? s.dep : 0); else group("wind");
+    this.draw(); this.results();
+  },
+  draw() {
+    const g = group("routes"), R = S.p1.res.routes; S.p1.drones = [];
+    R.forEach((r, k) => { const pts = r.nodes.map((n) => nodeV(n, 2)), c = SER[k % 8], sel = k === S.p1.sel;
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.05), Math.max(30, pts.length * 10), Math.max(2, S.C.W * (sel ? 0.06 : 0.035)), 8, false),
+        new THREE.MeshLambertMaterial({ color: col(c), transparent: true, opacity: sel ? 0.95 : 0.55 })); g.add(tube);
+      if (sel) { const dr = makeDrone(c, droneScale()); g.add(dr); S.p1.drones.push({ obj: dr, r }); } });
+    S.anim.tmax = Math.max(1, ...R.map((r) => r.time)); S.anim.rate = S.anim.tmax / 14; S.anim.t = 0; S.anim.playing = !REDUCED;
+    legend(R.slice(0, 6).map((r, k) => ({ c: SER[k], t: `Pareto route ${k + 1}` })).concat([{ c: "--lattice", t: "corridor network" }, { c: "--w-mid", t: "wind" }]));
+  },
+  results() {
+    const R = S.p1.res.routes, b = S.p1.base, s = S.p1, prof = R.map((r) => G.routeProfile(S.C, { nodes: r.nodes, T: r.T, E: r.E }));
+    const avgT = R.reduce((a, r) => a + r.time, 0) / R.length / 60, avgE = R.reduce((a, r) => a + r.energy, 0) / R.length / 3.6e6;
+    const ref = s.exp === "shear" && S.design.preset === "trr" && !S.buildingsOn ? P1REF.t1[String(s.dir)] : s.exp === "spatial" && S.design.preset === "trr" && !S.buildingsOn ? P1REF.t3[String(s.dir)] : s.exp === "none" ? P1REF.t1.none : null;
+    $("p1-kpis").innerHTML = kpiHTML([
+      { k: "Pareto routes", v: R.length, r: ref ? `paper ${ref[2]}` : "" },
+      { k: "Avg time", v: fmt(avgT, 2) + " min", r: ref ? `paper ${ref[0]}` : `no wind ${fmt(b.time / 60, 2)}`, hot: true },
+      { k: "Avg energy", v: fmt(avgE, 4) + " kWh", r: ref ? `paper ${ref[1]}` : `no wind ${fmt(b.energy / 3.6e6, 4)}` },
+      { k: "Ascents", v: fmt(prof.reduce((a, p) => a + p.ascents, 0) / R.length, 1), r: ref ? `paper ${ref[3]}` : "" },
+      { k: "Labels", v: S.p1.res.labels.toLocaleString() }, { k: "Solve", v: fmt(S.p1.ms, 0) + " ms" }]);
+    const pr = prof[s.sel] || prof[0], bands = Object.keys(pr.altTime).sort((x, y) => parseFloat(x) - parseFloat(y) || x.length - y.length);
+    drawer("Paper 1 · Pareto set", `
+      <section class="sec"><h3>Time–energy Pareto frontier <span>click a route to fly it</span></h3><canvas class="chart" id="c-front"></canvas>
+      <div class="tw"><table><thead><tr><th>Route</th><th>Time (min)</th><th>Energy (kWh)</th><th>vs no wind</th><th>Asc / desc</th><th>Max alt (ft)</th></tr></thead><tbody>${R.map((r, k) => `<tr class="click${k === s.sel ? " sel" : ""}" data-k="${k}"><td><span class="sw" style="background:var(${SER[k % 8]})"></span>${k + 1}</td><td class="m">${fmt(r.time / 60, 2)}</td><td class="m">${fmt(r.energy / 3.6e6, 4)}</td><td class="m">${fmt(100 * (r.energy / b.energy - 1), 1)}%</td><td class="m">${prof[k].ascents}/${prof[k].descents}</td><td class="m">${Math.max(...r.nodes.map((n) => Math.round(S.C.pos[n][2] * FT)))}</td></tr>`).join("")}</tbody></table></div></section>
+      <section class="sec"><h3>Altitude usage of route ${s.sel + 1} <span>TRR Table 2 / 4</span></h3><div class="tw"><table><thead><tr><th>Band (ft)</th>${bands.map((x) => `<th>${x}</th>`).join("")}</tr></thead><tbody><tr><td>Time %</td>${bands.map((x) => `<td class="m">${fmt(pr.altTime[x], 1)}</td>`).join("")}</tr><tr><td>Energy %</td>${bands.map((x) => `<td class="m">${fmt(pr.altEnergy[x], 1)}</td>`).join("")}</tr></tbody></table></div>
+      <h3>Block usage <span>TRR Table 5</span></h3><div class="tw"><table><thead><tr><th></th>${pr.blockTime.map((_, i) => `<th>B${i + 1}</th>`).join("")}</tr></thead><tbody><tr><td>Time %</td>${pr.blockTime.map((v) => `<td class="m">${fmt(v, 1)}</td>`).join("")}</tr><tr><td>Energy %</td>${pr.blockEnergy.map((v) => `<td class="m">${fmt(v, 1)}</td>`).join("")}</tr></tbody></table></div></section>
+      <section class="sec" id="p1-exp-out"><h3>Experiment results <span>run from the left panel</span></h3><p class="note">Run Table 1, Figure 7 or Figure 8 to sweep this corridor and compare with the published values.</p></section>`);
+    chart($("c-front"), [{ name: "no wind", color: "--ink-3", pts: [[b.time / 60, b.energy / 3.6e6]], dots: true, hollow: true, r: 5 }].concat(R.map((r, k) => ({ color: SER[k % 8], pts: [[r.time / 60, r.energy / 3.6e6]], dots: true, r: k === s.sel ? 6 : 4 }))).concat([{ color: "--ink-2", width: 1, pts: R.map((r) => [r.time / 60, r.energy / 3.6e6]) }]),
+      { xlab: "Travel time (min)", ylab: "kWh" });
+    document.querySelectorAll("#dbody tr.click").forEach((tr) => tr.onclick = () => { S.p1.sel = +tr.dataset.k; this.draw(); this.results(); });
+  },
+  frame(dt) { const t = S.anim.t; for (const d of S.p1.drones || []) { const r = d.r; let i = 0; while (i < r.T.length - 2 && r.T[i + 1] < t) i++;
+    const f = Math.min(1, Math.max(0, (t - r.T[i]) / ((r.T[i + 1] - r.T[i]) || 1))), a = nodeV(r.nodes[i], 2), b = nodeV(r.nodes[Math.min(i + 1, r.nodes.length - 1)], 2);
+    d.obj.position.copy(a.clone().lerp(b, f)); d.obj.position.y += droneScale() * 1.5; const dir = b.clone().sub(a); if (dir.x || dir.z) d.obj.rotation.y = Math.atan2(-dir.z, dir.x); if (!REDUCED) d.obj.rotors.forEach((ro, k) => ro.rotation.y += (k % 2 ? 1 : -1) * dt * 40); } },
+  // ---------- experiments
+  table(spatial) {
+    const C = S.C, rows = [], [o, d] = this.od(), maker = spatial ? G.windSpatial : G.windShear, refT = spatial ? P1REF.t3 : P1REF.t1;
+    const valid = S.design.preset === "trr" && !S.buildingsOn;
+    for (const dir of ["none", 0, 45, 90, 135, 180, 225, 270, 315]) {
+      const w = dir === "none" ? G.windNone(C) : maker(C, dir), R = G.pareto(C, G.linkCosts(C, w, S.veh), w, S.veh, o, d).routes;
+      const pf = R.map((r) => G.routeProfile(C, { nodes: r.nodes, T: r.T, E: r.E }));
+      rows.push({ dir, n: R.length, T: R.reduce((a, r) => a + r.time, 0) / R.length / 60, E: R.reduce((a, r) => a + r.energy, 0) / R.length / 3.6e6, asc: pf.reduce((a, p) => a + p.ascents, 0) / R.length, des: pf.reduce((a, p) => a + p.descents, 0) / R.length, ref: refT[String(dir)] });
+    }
+    const cell = (v, r, d) => { if (!valid || r == null) return `<td class="m">${fmt(v, d)}</td>`; const ok = Math.abs(v - r) <= Math.max(0.02 * Math.abs(r), 10 ** -d * 1.5); return `<td class="m ${ok ? "ok" : "off"}">${fmt(v, d)} <span style="color:var(--ink-3)">/ ${r}</span></td>`; };
+    $("p1-exp-out").innerHTML = `<h3>${spatial ? "Table 3 · spatially and altitude-varying wind" : "Table 1 · wind orientation with altitude shear"} <span>${valid ? "repo / paper (green: within 2%)" : "paper values apply to the TRR preset in open field"}</span></h3>
+      <div class="tw"><table><thead><tr><th>Wind</th><th>Time (min)</th><th>Energy (kWh)</th><th>Paths</th><th>Asc</th><th>Desc</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${r.dir === "none" ? "No wind" : r.dir + "°" + (r.dir === 0 ? " tail" : r.dir === 180 ? " head" : "")}</td>${cell(r.T, r.ref && r.ref[0], 2)}${cell(r.E, r.ref && r.ref[1], 3)}${cell(r.n, r.ref && r.ref[2], 0)}${cell(r.asc, r.ref && r.ref[3], 1)}${cell(r.des, r.ref && r.ref[4], 1)}</tr>`).join("")}</tbody></table></div>
+      <p class="note">Energy uses TRR Eqs. 10–27${S.veh.phase_dependent ? " with the phase-dependent terms of Sec. 5.4" : ""}. ${spatial ? "The 180° case differs from the paper; see the README." : "Paper Table 1 reports 6.38 min at 315° and 6.30 min at 45°; the geometry and the Eq. 20 rule are symmetric, so the repo gives the same value for both."}</p>`;
+  },
+  temporal() {
+    const C = S.C, [o, d] = this.od(), out = [];
+    for (const dir of [0, 180]) for (const trend of ["calm_to_strong", "strong_to_calm"]) { const w = G.windTemporal(C, dir, trend), c = G.linkCosts(C, w, S.veh), pts = [], pe = [];
+      for (let k = 0; k < 10; k++) { const R = G.pareto(C, c, w, S.veh, o, d, { depart: 180 * k }).routes; pts.push([3 * k, R.reduce((a, r) => a + r.time, 0) / R.length / 60]); pe.push([3 * k, R.reduce((a, r) => a + r.energy, 0) / R.length / 3.6e6]); }
+      out.push({ dir, trend, pts, pe }); }
+    const col4 = { "0calm_to_strong": "--s1", "0strong_to_calm": "--s3", "180calm_to_strong": "--s8", "180strong_to_calm": "--s2" };
+    $("p1-exp-out").innerHTML = `<h3>Figure 7 · departure time under time-varying wind <span>2→22 mph over a 30-min window</span></h3><canvas class="chart" id="c-t1"></canvas><canvas class="chart" id="c-t2"></canvas>
+      <p class="note">${out.map((s) => `<span class="sw" style="background:var(${col4[s.dir + s.trend]})"></span>${s.dir ? "Head" : "Tail"}wind, ${s.trend.replace(/_/g, " ")}`).join(" &nbsp; ")}. Paper: tail calm→strong falls from ~8–9 to just over 6 min; head calm→strong rises above 25 min and 0.80 kWh.</p>`;
+    chart($("c-t1"), out.map((s) => ({ color: col4[s.dir + s.trend], pts: s.pts, dash: s.dir === 180, marks: true })), { xlab: "Departure (min)", ylab: "Avg travel time (min)" });
+    chart($("c-t2"), out.map((s) => ({ color: col4[s.dir + s.trend], pts: s.pe, dash: s.dir === 180, marks: true })), { xlab: "Departure (min)", ylab: "Avg energy (kWh)" });
+  },
+  closures() {
+    const C = S.C, [o, d] = this.od(), w = G.windNone(C), c = G.linkCosts(C, w, S.veh), R0 = G.rng(42), rows = [];
+    let lastMask = null;
+    for (let k = 0; k <= 9; k++) { const frac = k / 10, reps = []; for (let r = 0; r < 10; r++) { const mask = Array.from({ length: C.A }, () => R0() >= frac); const R = G.pareto(C, c, w, S.veh, o, d, { mask }).routes; reps.push(R); if (k === 6 && r === 0) lastMask = mask; }
+      const ok = reps.filter((R) => R.length), T = ok.map((R) => R.reduce((a, r) => a + r.time, 0) / R.length / 60), E = ok.map((R) => R.reduce((a, r) => a + r.energy, 0) / R.length / 3.6e6);
+      rows.push({ frac, feas: ok.length, paths: ok.length ? ok.reduce((a, R) => a + R.length, 0) / ok.length : NaN, T: T.length ? T.reduce((a, b) => a + b) / T.length : NaN, E: E.length ? E.reduce((a, b) => a + b) / E.length : NaN }); }
+    // show the 60 % closure pattern in 3D
+    const g = group("closed"), v = []; lastMask.forEach((ok, a) => { if (!ok && a < C.edges.length) { const p = nodeV(C.af[a]), q = nodeV(C.at[a]); v.push(p.x, p.y, p.z, q.x, q.y, q.z); } });
+    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--bad"), transparent: true, opacity: 0.5 })));
+    setTimeout(() => group("closed"), 9000);
+    $("p1-exp-out").innerHTML = `<h3>Figure 8 · link closures as a congestion proxy <span>10 replications per level</span></h3><canvas class="chart" id="c-cl"></canvas>
+      <div class="tw"><table><thead><tr><th>Closed</th><th>Feasible</th><th>Paths</th><th>Time (min)</th><th>Energy (kWh)</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${Math.round(r.frac * 100)}%</td><td class="m">${r.feas}/10</td><td class="m">${fmt(r.paths, 1)}</td><td class="m">${fmt(r.T, 2)}</td><td class="m">${fmt(r.E, 3)}</td></tr>`).join("")}</tbody></table></div>
+      <p class="note">Red links in the 3D view show one 60% closure draw (directed links, as in the paper). Paper: all replications feasible up to 80%, 4/10 at 90%; the threshold depends on the number of lanes, which you can raise in the corridor design.</p>`;
+    chart($("c-cl"), [{ color: "--s1", pts: rows.map((r) => [r.frac * 100, r.feas * 10]), marks: true }, { color: "--s2", pts: (P1REF.f8 || []).map(([x, y]) => [x, y]), dash: true, marks: true }], { xlab: "Links closed (%) · dashed: paper", ylab: "Feasible replications (%)", ymin: 0, ymax: 100 });
+  },
+};
+function panelP1() {
+  const s = S.p1, dirs = [0, 45, 90, 135, 180, 225, 270, 315].map((d) => `<option value="${d}"${s.dir === d ? " selected" : ""}>${d}°${d === 0 ? " (tailwind)" : d === 180 ? " (headwind)" : d === 90 || d === 270 ? " (crosswind)" : ""}</option>`).join("");
+  const lanes = (sel) => Array.from({ length: S.design.nlat + 1 }, (_, j) => `<option value="${j}"${sel === j ? " selected" : ""}>Lane ${j}</option>`).join("");
+  return `
+  <section class="sec"><h3>Wind-aware Pareto routing <span>TRR · Ahmed, Abdelghany, Huffman</span></h3>
+    <p class="note">Time-dependent bi-objective label-correcting search (Algorithms 1–2) on the 4D corridor network. Every non-dominated time–energy route is kept.</p></section>
+  ${designSection("TRR geometry: 5 × 6,000 ft")}
+  <section class="sec"><h3>Wind experiment</h3>
+    <div class="row">Profile <select id="p1-exp">
+      <option value="none"${s.exp === "none" ? " selected" : ""}>No wind (baseline)</option>
+      <option value="shear"${s.exp === "shear" ? " selected" : ""}>6.2 · altitude shear 10/15/20/30 mph</option>
+      <option value="spatial"${s.exp === "spatial" ? " selected" : ""}>6.3 · shear + weak blocks B1–B2</option>
+      <option value="temporal"${s.exp === "temporal" ? " selected" : ""}>6.4 · time-varying 2↔22 mph</option>
+      <option value="urban"${s.exp === "urban" ? " selected" : ""}>City · building-aware wind</option>
+      <option value="weather"${s.exp === "weather" ? " selected" : ""}>Live weather profile</option></select></div>
+    ${["shear", "spatial", "temporal"].includes(s.exp) ? `<div class="row">Wind toward <select id="p1-dir">${dirs}</select></div>` : ""}
+    ${s.exp === "temporal" ? `<div class="row">Trend <div class="seg"><button type="button" id="p1-tr0" aria-pressed="${s.trend === "calm_to_strong"}">Calm → strong</button><button type="button" id="p1-tr1" aria-pressed="${s.trend === "strong_to_calm"}">Strong → calm</button></div></div>
+      <div class="row">Departure <div><input type="range" id="p1-dep" min="0" max="9" value="${s.dep}"><div class="note">${s.dep * 3} min into the 30-min window</div></div></div>` : ""}
+    ${s.exp === "urban" ? `<div class="row3"><label>Speed (m/s)<input type="number" id="p1-bgs" min="0" max="20" step="1" value="${s.bg.speed}"></label><label>Toward (°, axis = 0)<input type="number" id="p1-bgd" step="15" value="${s.bg.dir}"></label><label>&nbsp;<span class="note">${S.buildingsOn ? "flows around buildings" : "open field: profile only"}</span></label></div>` : ""}
+    ${s.exp === "weather" ? `${weatherTable()}<button class="btn" type="button" id="p1-wx">Fetch live wind</button>` : ""}
+    <div class="row">Energy model <div class="seg"><button type="button" id="p1-ph0" aria-pressed="${!S.veh.phase_dependent}">Cruise (Eqs. 10–27)</button><button type="button" id="p1-ph1" aria-pressed="${S.veh.phase_dependent}">+ phases (5.4)</button></div></div>
+    <div class="eq">v = v<sub>UAV</sub> ± |ψ| if γ ≤ 45° / ≥ 135°, else v<sub>UAV</sub> (Eq. 20)<br>λ = v<sub>UAV</sub>/v · d = d̄λ · β = λ² · e = ēβ (Eqs. 24–27)<br>ē = 20.42 J/ft × L · v<sub>UAV</sub> = 35 mph${S.veh.phase_dependent ? "<br>α<sub>climb</sub> = 1 + 0.2 sin φ · E<sub>TO</sub> = 10% of no-wind route energy" : ""}</div>
+    <div class="row2"><label>Origin lane<select id="p1-ol">${lanes(s.oLane)}</select></label><label>Destination lane<select id="p1-dl">${lanes(s.dLane)}</select></label></div>
+    <div class="btns"><button class="btn primary" type="button" id="p1-run">Route</button><button class="btn" type="button" id="p1-fly">Fly again</button></div>
+    <div id="p1-kpis"></div>
+  </section>
+  <section class="sec"><h3>Reproduce the paper <span>sweeps this corridor</span></h3>
+    <div class="btns"><button class="btn" type="button" id="p1-t1">Table 1 (6.2)</button><button class="btn" type="button" id="p1-t3">Table 3 (6.3)</button><button class="btn" type="button" id="p1-f7">Figure 7 (6.4)</button><button class="btn" type="button" id="p1-f8">Figure 8 (6.5)</button></div>
+    <p class="note">Paper values apply to the TRR preset in open field. Switch to City to see how the same experiments behave between real buildings.</p></section>`;
+}
+function wireP1() {
+  const s = S.p1, re = () => P1.run();
+  wireDesign(re);
+  $("p1-exp").onchange = (e) => { s.exp = e.target.value; renderPanel(); re(); };
+  if ($("p1-dir")) $("p1-dir").onchange = (e) => { s.dir = +e.target.value; re(); };
+  if ($("p1-tr0")) { $("p1-tr0").onclick = () => { s.trend = "calm_to_strong"; renderPanel(); re(); }; $("p1-tr1").onclick = () => { s.trend = "strong_to_calm"; renderPanel(); re(); };
+    $("p1-dep").oninput = (e) => { s.dep = +e.target.value; e.target.nextElementSibling.textContent = `${s.dep * 3} min into the 30-min window`; re(); }; }
+  if ($("p1-bgs")) { $("p1-bgs").onchange = (e) => { s.bg.speed = +e.target.value; re(); }; $("p1-bgd").onchange = (e) => { s.bg.dir = +e.target.value; re(); }; }
+  if ($("p1-wx")) $("p1-wx").onclick = async () => { await fetchWeather(); renderPanel(); re(); };
+  $("p1-ph0").onclick = () => { S.veh.phase_dependent = false; renderPanel(); re(); }; $("p1-ph1").onclick = () => { S.veh.phase_dependent = true; renderPanel(); re(); };
+  $("p1-ol").onchange = (e) => { s.oLane = +e.target.value; re(); }; $("p1-dl").onchange = (e) => { s.dLane = +e.target.value; re(); };
+  $("p1-run").onclick = re; $("p1-fly").onclick = () => { S.anim.t = 0; S.anim.playing = true; };
+  $("p1-t1").onclick = () => P1.table(false); $("p1-t3").onclick = () => P1.table(true); $("p1-f7").onclick = () => P1.temporal(); $("p1-f8").onclick = () => P1.closures();
+}
+
+// ===================================================================== PAPER 2: SIRE airspace configuration
+const P2 = {
+  tau() {   // link traversal seconds: cruise, or with the current wind (TRR Eq. 26)
+    const C = S.C, w = S.p2.windLinks ? P1.wind() : G.windNone(C); return G.linkCosts(C, w, S.veh).t[0];
+  },
+  H() { return Math.ceil((S.p2.win * 60 + 2 * 1.2 * S.C.L * FT / (35 * 5280 / 3600) + 300) / S.p2.slot); },
+  run() {
+    const C = S.C, s = S.p2; if (!C.origins.length || !C.destinations.length) return;
+    const t0 = performance.now(), slotsWin = Math.max(1, Math.round(s.win * 60 / s.slot));
+    const trips = G.demand(C, s.D, { operators: s.ops, window: slotsWin, forward_share: s.share, pattern: s.pattern, seed: 1000 + (s.seed || 1) });
+    const res = G.sire(C, this.tau(), trips, { slot: s.slot, H: this.H(), rule: s.rule, groundTransit: !S.design.vert, tieBreak: s.tie });
+    S.p2.trips = trips; S.p2.res = res; S.p2.k = G.kpis(trips, res); S.p2.ms = performance.now() - t0;
+    this.draw(); this.results();
+  },
+  draw() {
+    const g = group("routes"), s = S.p2, acc = s.res.map((r, i) => r.ok ? i : -1).filter((i) => i >= 0);
+    const mesh = new THREE.InstancedMesh(droneGeo(droneScale() * 0.75), new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, acc.length));
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); acc.forEach((i, k) => mesh.setColorAt(k, col(SER[(s.trips[i].op - 1) % 8]))); if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    g.add(mesh); s.mesh = mesh; s.acc = acc;
+    s.rings = [...S.C.origins, ...S.C.destinations].map((n) => { const m = new THREE.Mesh(new THREE.RingGeometry(S.C.W * 0.25, S.C.W * 0.35, 28), new THREE.MeshBasicMaterial({ color: col("--bad"), transparent: true, opacity: 0, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.copy(nodeV(n)); m.position.y = 1.2; g.add(m); return { n, m }; });
+    s.okRings = s.rings.map(({ n }) => { const m = new THREE.Mesh(new THREE.RingGeometry(S.C.W * 0.12, S.C.W * 0.2, 28), new THREE.MeshBasicMaterial({ color: col("--good"), transparent: true, opacity: 0, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.copy(nodeV(n)); m.position.y = 1.4; g.add(m); return { n, m }; });
+    S.anim.tmax = Math.max(s.win * 60, ...acc.map((i) => s.res[i].legs.slice(-1)[0][2] * s.slot)); S.anim.rate = S.anim.tmax / 45; S.anim.t = 0; S.anim.playing = !REDUCED;
+    legend(Array.from({ length: s.ops }, (_, k) => ({ c: SER[k % 8], t: `Operator ${k + 1}` })).concat([{ c: "--good", t: "request booked" }, { c: "--bad", t: "request rejected" }]));
+  },
+  results() {
+    const s = S.p2, k = s.k, ref = DATA.ref.trb;
+    $("p2-kpis").innerHTML = kpiHTML([{ k: "Success rate", v: fmt(100 * k.sr, 1) + "%", hot: true, r: S.design.preset === "trb" && !S.buildingsOn && ref.sr[s.D] ? `paper ${fmt(100 * ref.sr[s.D], 1)}%` : "" },
+      { k: "Accepted", v: k.accepted, r: `of ${k.demand}` }, { k: "Accepted TT", v: fmt(k.tt, 0) + " s" }, { k: "Gini", v: fmt(k.gini, 3), r: "operator SR" }, { k: "Cascade", v: fmt(k.cascade, 2), r: "W = 5" }, { k: "Registry", v: fmt(s.ms / 1000, 1) + " s" }]);
+    drawer("Paper 2 · reservation ledger", `<section class="sec"><h3>Space-time ledger <span>lines: booked trips · ticks: rejections</span></h3><canvas class="chart" id="c-led" style="height:210px"></canvas>
+      <h3>Operator access <span>Eq. 18</span></h3><canvas class="chart" id="c-ops" style="height:120px"></canvas></section>
+      <section class="sec" id="p2-exp-out"><h3>Experiments <span>run from the left panel</span></h3><p class="note">Sweep demand, corridor configuration, directional organisation or the dispatch window on this corridor. The configuration explorer recommends the smallest airspace that meets your target success rate.</p></section>`);
+    this.ops();
+  },
+  ops() { const k = S.p2.k, c = $("c-ops"); if (!c) return; const r = c.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); c.width = r.width * dpr; c.height = r.height * dpr; const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = k.opSR.length, bw = (r.width - 40) / n; ctx.font = `10px ${css("--font-mono")}`; k.opSR.forEach((v, i) => { ctx.fillStyle = css(SER[i % 8]); const h = v * (r.height - 24); ctx.fillRect(36 + i * bw + 2, r.height - 16 - h, bw - 4, h); ctx.fillStyle = css("--ink-3"); ctx.textAlign = "center"; ctx.fillText(`${Math.round(v * 100)}%`, 36 + i * bw + bw / 2, r.height - 18 - h); ctx.fillText(`Op ${i + 1}`, 36 + i * bw + bw / 2, r.height - 3); }); },
+  ledger() {
+    const s = S.p2, c = $("c-led"); if (!c) return; const C = S.C, slot = s.slot;
+    const pts = []; const ch = chart(c, [{ color: "--rule", pts: [[0, 0], [S.anim.tmax / 60, C.L * FT / 1000]], width: 0 }], { xlab: "Time (min)", ylab: "kft along corridor", ymin: 0, ymax: C.L * FT / 1000, xmin: 0, xmax: S.anim.tmax / 60, vline: S.anim.t / 60 });
+    if (!ch) return; const ctx = c.getContext("2d"); ctx.lineWidth = 1; ctx.globalAlpha = Math.max(0.15, Math.min(0.7, 80 / Math.max(1, s.acc.length)));
+    for (const i of s.acc) { const lg = s.res[i].legs; ctx.strokeStyle = css(SER[(s.trips[i].op - 1) % 8]); ctx.beginPath(); ctx.moveTo(ch.X(lg[0][1] * slot / 60), ch.Y(C.pos[C.af[lg[0][0]]][0] * FT / 1000)); for (const l of lg) ctx.lineTo(ch.X(l[2] * slot / 60), ch.Y(C.pos[C.at[l[0]]][0] * FT / 1000)); ctx.stroke(); }
+    ctx.globalAlpha = 0.6; ctx.strokeStyle = css("--bad"); s.trips.forEach((t, i) => { if (!s.res[i].ok) { const x = ch.X(t.dispatch * slot / 60), y = ch.Y(C.pos[t.o][0] * FT / 1000); ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4); ctx.stroke(); } }); ctx.globalAlpha = 1;
+  },
+  frame() {
+    const s = S.p2; if (!s.mesh) return; const t = S.anim.t, slot = s.slot, C = S.C, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), UP = new THREE.Vector3(0, 1, 0);
+    let air = 0;
+    s.acc.forEach((i, k) => { const lg = s.res[i].legs, ts = lg[0][1] * slot, te = lg[lg.length - 1][2] * slot; let p = new THREE.Vector3(0, -9999, 0);
+      if (t >= ts && t <= te) { let L0 = lg[0]; for (const l of lg) if (l[1] * slot <= t) L0 = l; const f = Math.min(1, (t - L0[1] * slot) / ((L0[2] - L0[1]) * slot)), a = nodeV(C.af[L0[0]], 3), b = nodeV(C.at[L0[0]], 3); p = a.clone().lerp(b, f); const d = b.clone().sub(a); Q.setFromAxisAngle(UP, Math.atan2(-d.z, d.x)); air++; }
+      M.compose(p, Q, one); s.mesh.setMatrixAt(k, M); });
+    s.mesh.instanceMatrix.needsUpdate = true;
+    const bad = {}, good = {}; let sub = 0, ok = 0; s.trips.forEach((tr, i) => { const td = tr.dispatch * slot; if (td <= t) { sub++; if (s.res[i].ok) ok++; const age = (t - td) / Math.max(20, S.anim.rate * 1.5); if (age < 1) (s.res[i].ok ? good : bad)[tr.o] = Math.max((s.res[i].ok ? good : bad)[tr.o] || 0, 1 - age); } });
+    s.rings.forEach((r) => r.m.material.opacity = (bad[r.n] || 0) * 0.9); s.okRings.forEach((r) => r.m.material.opacity = (good[r.n] || 0) * 0.9);
+    const el = $("p2-live"); if (el) el.innerHTML = `t = ${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")} · submitted ${sub} · booked ${ok} · rejected ${sub - ok} · airborne ${air}`;
+    this.ledger();
+  },
+  // ---------- experiments in a Web Worker
+  worker() { if (!this.w) { const src = ENGINE_SRC + "\n" + WORKER_SRC; this.w = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" }))); } return this.w; },
+  sweep(kind) {
+    const s = S.p2, d = S.design, w = this.worker(), reps = +$("p2-reps").value, prog = $("p2-prog");
+    const job = { kind, reps, base: { D: s.D, ops: s.ops, share: s.share, rule: s.rule, win: s.win, pattern: s.pattern, tie: s.tie, slot: s.slot },
+      spec: S.spec, buildings: buildingsCorr(), vert: d.vert, target: +$("p2-target").value / 100, design: { mwid: d.mwid },
+      nwList: S.buildingsOn ? [2, 4, 6, 8] : [1, 2, 3, 4] };
+    $("p2-exp-out").innerHTML = `<h3>Running ${kind} sweep…</h3><div class="prog"><i id="p2-bar"></i></div>`; prog.textContent = "running…";
+    w.onmessage = (e) => { const m = e.data; if (m.progress != null) { const b = $("p2-bar"); if (b) b.style.width = `${100 * m.progress}%`; return; } prog.textContent = ""; this.show(kind, m.result, job); };
+    w.postMessage(job);
+  },
+  show(kind, R, job) {
+    const ref = DATA.ref.trb, out = $("p2-exp-out"), valid = S.design.preset === "trb" && !S.buildingsOn;
+    if (kind === "demand") {
+      out.innerHTML = `<h3>Experiment 1 · capacity declaration <span>${valid ? "dashed: paper (30 reps)" : "this corridor"}</span></h3><canvas class="chart" id="c-e1"></canvas><canvas class="chart" id="c-e1b"></canvas>
+        <div class="tw"><table><thead><tr><th>Demand</th><th>SR</th><th>Accepted</th><th>Gini</th><th>Cascade</th><th>TT (s)</th></tr></thead><tbody>${R.map((r) => `<tr><td>${r.D}</td><td class="m">${fmt(100 * r.sr, 1)}%${valid && ref.sr[r.D] ? ` <span style="color:var(--ink-3)">/ ${fmt(100 * ref.sr[r.D], 1)}</span>` : ""}</td><td class="m">${fmt(r.accepted, 0)}</td><td class="m">${fmt(r.gini, 3)}</td><td class="m">${fmt(r.cascade, 2)}</td><td class="m">${fmt(r.tt, 0)}</td></tr>`).join("")}</tbody></table></div>
+        <p class="note">Capacity shows up as denied access, not delay: accepted throughput plateaus while travel time of accepted trips barely moves. Declare capacity by SR and accepted throughput.</p>`;
+      const refPts = Object.entries(ref.sr).map(([d, v]) => [+d, 100 * v]).filter(([d]) => d <= Math.max(...R.map((r) => r.D)));
+      chart($("c-e1"), [{ color: "--s1", pts: R.map((r) => [r.D, 100 * r.sr]), marks: true }].concat(valid ? [{ color: "--ink-3", pts: refPts, dash: true }] : []), { xlab: "Trip requests", ylab: "SR (%)", ymin: 0, ymax: 100 });
+      chart($("c-e1b"), [{ color: "--s3", pts: R.map((r) => [r.D, r.accepted]), marks: true }, { color: "--s7", pts: R.map((r) => [r.D, r.gini * 1000]), marks: true, dash: true }], { xlab: "Trip requests · solid: accepted trips · dashed: Gini × 1000", ylab: "count" });
+    } else if (kind === "config") {
+      const ws = [...new Set(R.map((r) => r.nw))], hs = [...new Set(R.map((r) => r.nh))], get = (w, h) => R.find((r) => r.nw === w && r.nh === h);
+      const target = job.target, okc = R.filter((r) => isFinite(r.sr) && r.sr >= target).sort((a, b) => a.volume - b.volume || b.sr - a.sr), best = okc[0];
+      out.innerHTML = `<h3>Experiment 2 · lateral width vs altitude layers <span>${job.base.D} requests · ${job.reps} rep(s)</span></h3>
+        <div class="tw"><table><thead><tr><th>N<sub>W</sub> \\ N<sub>H</sub></th>${hs.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${ws.map((w) => `<tr><td>${w} (${w + 1} lanes)</td>${hs.map((h) => { const r = get(w, h); const a = r.sr; return r.nopad ? `<td class="m" title="no open launch pad">no pad</td>` : `<td class="m" style="background:color-mix(in srgb, var(--s1) ${Math.round(a * 70)}%, transparent);${best && r === best ? "outline:2px solid var(--accent)" : ""}">${fmt(100 * a, 0)}%</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+        <h3>Marginal gain <span>percentage points</span></h3>
+        <div class="tw"><table><thead><tr><th>Step</th><th>+1 lateral module</th><th>+1 altitude layer</th></tr></thead><tbody>${ws.slice(1).map((w, i) => `<tr><td>N<sub>W</sub> ${ws[i]}→${w} / N<sub>H</sub> ${hs[i] ?? "–"}→${hs[i + 1] ?? "–"}</td><td class="m">${fmt(100 * mean(hs.map((h) => get(w, h).sr - get(ws[i], h).sr)), 1)}</td><td class="m">${hs[i + 1] ? fmt(100 * mean(ws.map((ww) => get(ww, hs[i + 1]).sr - get(ww, hs[i]).sr)), 1) : "–"}</td></tr>`).join("")}</tbody></table></div>
+        <div class="eq">${best ? `Recommended: N<sub>W</sub> = ${best.nw}, N<sub>H</sub> = ${best.nh} — the smallest airspace (${best.volume} module columns × layers) reaching SR ≥ ${Math.round(target * 100)}% (${fmt(100 * best.sr, 1)}%).` : `No tested configuration reaches SR ≥ ${Math.round(target * 100)}%. Spread demand over a wider dispatch window or lower the target.`}</div>
+        ${best ? `<button class="btn" type="button" id="p2-apply">Apply recommended configuration</button>` : ""}
+        <p class="note">${valid ? "Paper (2,000 trips): widening N<sub>W</sub> 1→4 raises SR 18→59% at N<sub>H</sub> = 1; each extra layer adds at most 3.3 points." : "Adding lateral modules also adds ground portals; the TRB revision cell E2b separates the two effects."}</p>`;
+      if (best) $("p2-apply").onclick = () => { S.design.nlat = best.nw; const ceil = S.design.z[S.design.z.length - 1]; S.design.z = [0]; for (let k = 1; k <= best.nh; k++) S.design.z.push(Math.round(k * ceil / best.nh)); S.design.preset = "custom"; renderPanel(); rebuild(); P2.run(); };
+    } else if (kind === "direction") {
+      const sh = [...new Set(R.map((r) => r.share))].sort((a, b) => b - a), g = (f, rule) => R.find((r) => r.share === f && r.rule === rule).sr;
+      out.innerHTML = `<h3>Experiment 3 · directional access policy <span>${valid ? "paper in grey" : ""}</span></h3>
+        <div class="tw"><table><thead><tr><th>Forward / reverse</th><th>Shared links</th><th>Separated</th><th>Gain (pp)</th></tr></thead><tbody>${sh.map((f) => { const p = valid ? ref.dir[String(f)] : null; return `<tr><td>${Math.round(f * 100)}/${Math.round(100 - f * 100)}</td><td class="m">${fmt(100 * g(f, "undirected"), 1)}%${p ? ` <span style="color:var(--ink-3)">/ ${p[0]}</span>` : ""}</td><td class="m">${fmt(100 * g(f, "directed"), 1)}%${p ? ` <span style="color:var(--ink-3)">/ ${p[1]}</span>` : ""}</td><td class="m">${fmt(100 * (g(f, "directed") - g(f, "undirected")), 1)}</td></tr>`; }).join("")}</tbody></table></div>
+        <p class="note">Direction-separated resources pay off most when opposing flows are balanced.</p>`;
+    } else if (kind === "dispatch") {
+      const wins = [...new Set(R.map((r) => r.win))].sort((a, b) => a - b);
+      out.innerHTML = `<h3>Experiment 4 · dispatch window <span>${job.base.D} requests</span></h3><canvas class="chart" id="c-e4"></canvas>
+        <p class="note">Solid: uniform dispatch · dashed: peak-centred. ${valid ? "Paper: 3.3% at 5 min to 36.9% at 60 min; about 0.6 points per extra minute." : ""}</p>`;
+      chart($("c-e4"), ["uniform", "peak"].map((p, k) => ({ color: k ? "--s2" : "--s1", dash: !!k, marks: true, pts: wins.map((w) => [w, 100 * R.find((r) => r.win === w && r.pattern === p).sr]) })), { xlab: "Dispatch window (min)", ylab: "SR (%)", ymin: 0 });
+    } else if (kind === "equity") {
+      const tbs = ["operator", "random", "rotating"], lab = { operator: "By operator id", random: "Lottery", rotating: "Rotating" };
+      out.innerHTML = `<h3>Equity · same-minute tie-break <span>${job.base.ops} operators</span></h3><div class="tw"><table><thead><tr><th>Rule</th><th>SR</th><th>Gini</th>${R[0].opSR.map((_, i) => `<th>Op ${i + 1}</th>`).join("")}</tr></thead><tbody>${tbs.map((t) => { const r = R.find((x) => x.tie === t); return `<tr><td>${lab[t]}</td><td class="m">${fmt(100 * r.sr, 1)}%</td><td class="m">${fmt(r.gini, 3)}</td>${r.opSR.map((v) => `<td class="m">${fmt(100 * v, 0)}%</td>`).join("")}</tr>`; }).join("")}</tbody></table></div>
+        <p class="note">The published rule orders same-minute requests by operator id, so operator 1 books first; a lottery or rotating order removes most of the gap at the same total throughput.</p>`;
+    }
+  },
+};
+const WORKER_SRC = `
+self.onmessage = (e) => {
+  const G = self.LabEngine, j = e.data, b = j.base, FT = G.FT, out = [];
+  const runOne = (spec, over) => { const p = Object.assign({}, b, over); const C = G.buildCorridor(spec, j.buildings); if (!C.origins.length || !C.destinations.length) return null;
+    const veh = { cruise_mph: 35, energy_j_per_ft: 20.42 }; const tau = Array.from(C.len, (L) => L * FT / (35 * 5280 / 3600));
+    const H = Math.ceil((p.win * 60 + 2 * 1.2 * C.L * FT / (35 * 5280 / 3600) + 300) / p.slot), agg = { sr: 0, accepted: 0, gini: 0, cascade: 0, tt: 0, opSR: null };
+    for (let r = 0; r < j.reps; r++) { const trips = G.demand(C, p.D, { operators: p.ops, window: Math.max(1, Math.round(p.win * 60 / p.slot)), forward_share: p.share, pattern: p.pattern, seed: 1001 + r });
+      const k = G.kpis(trips, G.sire(C, tau, trips, { slot: p.slot, H, rule: p.rule, groundTransit: !j.vert, tieBreak: p.tie, seed: r }));
+      agg.sr += k.sr / j.reps; agg.accepted += k.accepted / j.reps; agg.gini += k.gini / j.reps; agg.cascade += k.cascade / j.reps; agg.tt += k.tt / j.reps; agg.opSR = agg.opSR ? agg.opSR.map((v, i) => v + k.opSR[i] / j.reps) : k.opSR.map((v) => v / j.reps); }
+    return Object.assign(agg, over, { D: p.D }); };
+  let cells = [];
+  if (j.kind === "demand") cells = [100, 200, 400, 600, 800, 1000, 1500, 2000].map((D) => ({ spec: j.spec, over: { D } }));
+  if (j.kind === "config") for (const nw of j.nwList) for (const nh of [1, 2, 3, 4]) { const z = [0]; const ceil = j.spec.z_levels[j.spec.z_levels.length - 1]; for (let k = 1; k <= nh; k++) z.push(k * ceil / nh);
+    cells.push({ spec: Object.assign({}, j.spec, { n_lat: nw, z_levels: z }), over: { nw, nh, volume: nw * nh } }); }
+  if (j.kind === "direction") for (const share of [1, 0.75, 0.5, 0.25]) for (const rule of ["undirected", "directed"]) cells.push({ spec: j.spec, over: { share, rule } });
+  if (j.kind === "dispatch") for (const win of [5, 10, 20, 30, 45, 60]) for (const pattern of ["uniform", "peak"]) cells.push({ spec: j.spec, over: { win, pattern } });
+  if (j.kind === "equity") for (const tie of ["operator", "random", "rotating"]) cells.push({ spec: j.spec, over: { tie } });
+  cells.forEach((c, i) => { const r = runOne(c.spec, c.over); out.push(r || Object.assign({ sr: NaN, accepted: NaN, gini: NaN, cascade: NaN, tt: NaN, opSR: [], nopad: true }, c.over)); self.postMessage({ progress: (i + 1) / cells.length }); });
+  self.postMessage({ result: out });
+};`;
+function panelP2() {
+  const s = S.p2, opt = (vals, cur, lab) => vals.map((v) => `<option value="${v}"${cur === v ? " selected" : ""}>${lab ? lab(v) : v}</option>`).join("");
+  return `
+  <section class="sec"><h3>Shared-Intent Reservation Engine <span>TRB · Ahmed & Abdelghany</span></h3>
+    <p class="note">Operators submit trip intents; the registry publishes only which link-time slots are taken. Each operator routes itself on what is left; the registry commits the route atomically or rejects the request.</p></section>
+  ${designSection("TRB baseline: 30 × 2 × 4 modules")}
+  <section class="sec"><h3>Demand and operating rules</h3>
+    <div class="row3"><label>Requests D<input type="number" id="p2-D" min="20" max="4000" step="50" value="${s.D}"></label><label>Operators<input type="number" id="p2-ops" min="1" max="10" value="${s.ops}"></label><label>Slot Δt (s)<select id="p2-slot">${opt([10, 20, 30, 60], s.slot)}</select></label></div>
+    <div class="row3"><label>Forward share<select id="p2-share">${opt([1, 0.75, 0.5, 0.25], s.share, (v) => `${v * 100}/${100 - v * 100}`)}</select></label><label>Window (min)<select id="p2-win">${opt([5, 10, 20, 30, 60], s.win)}</select></label><label>Pattern<select id="p2-pat">${opt(["uniform", "peak"], s.pattern)}</select></label></div>
+    <div class="row">Opposing flows <div class="seg"><button type="button" id="p2-r0" aria-pressed="${s.rule === "undirected"}">Shared link key</button><button type="button" id="p2-r1" aria-pressed="${s.rule === "directed"}">Separated</button></div></div>
+    <div class="row">Tie-break <select id="p2-tie">${opt(["operator", "random", "rotating"], s.tie, (v) => ({ operator: "Operator id (published)", random: "Lottery", rotating: "Rotating priority" })[v])}</select></div>
+    <div class="row">Link times <div class="seg"><button type="button" id="p2-w0" aria-pressed="${!s.windLinks}">Cruise (paper)</button><button type="button" id="p2-w1" aria-pressed="${s.windLinks}">Current wind</button></div></div>
+    <div class="btns"><button class="btn primary" type="button" id="p2-run">Run registry</button><button class="btn" type="button" id="p2-replay">Replay</button></div>
+    <div id="p2-kpis"></div><p class="note" id="p2-live"></p>
+  </section>
+  <section class="sec"><h3>Experiments <span>Web Worker · <span id="p2-prog"></span></span></h3>
+    <div class="row3"><label>Replications<select id="p2-reps">${opt([1, 2, 3, 5], 1)}</select></label><label>Target SR (%)<input type="number" id="p2-target" min="10" max="100" step="5" value="60"></label><label>&nbsp;</label></div>
+    <div class="btns"><button class="btn" type="button" data-sw="demand">Exp 1 · demand</button><button class="btn" type="button" data-sw="config">Exp 2 · configure airspace</button><button class="btn" type="button" data-sw="direction">Exp 3 · direction</button><button class="btn" type="button" data-sw="dispatch">Exp 4 · dispatch window</button><button class="btn" type="button" data-sw="equity">Equity · tie-break</button></div>
+    <p class="note">Paper values apply to the TRB preset in open field with 3 operators and a 60-min window. Exp 2 uses the current demand; at 2,000 requests a sweep takes a minute or two in the browser.</p></section>`;
+}
+function wireP2() {
+  const s = S.p2, re = () => P2.run(); wireDesign(re);
+  const n = (id, k, f = (v) => +v) => { $(id).onchange = (e) => { s[k] = f(e.target.value); re(); }; };
+  n("p2-D", "D", (v) => Math.max(1, Math.min(4000, +v | 0))); n("p2-ops", "ops", (v) => Math.max(1, Math.min(10, +v | 0))); n("p2-slot", "slot"); n("p2-share", "share"); n("p2-win", "win"); n("p2-pat", "pattern", (v) => v); n("p2-tie", "tie", (v) => v);
+  $("p2-r0").onclick = () => { s.rule = "undirected"; renderPanel(); re(); }; $("p2-r1").onclick = () => { s.rule = "directed"; renderPanel(); re(); };
+  $("p2-w0").onclick = () => { s.windLinks = false; renderPanel(); re(); }; $("p2-w1").onclick = () => { s.windLinks = true; renderPanel(); re(); toast(`Link times use the Paper 1 wind setting (${S.p1.exp}).`); };
+  $("p2-run").onclick = re; $("p2-replay").onclick = () => { S.anim.t = 0; S.anim.playing = true; };
+  document.querySelectorAll("[data-sw]").forEach((b) => b.onclick = () => P2.sweep(b.dataset.sw));
+}
+
+// ===================================================================== PAPER 3: rolling horizon (Python ILP replays)
+const P3 = {
+  M: ["fcfs", "ilp", "offline"], ML: { fcfs: "FCFS", ilp: "Rolling ILP", offline: "Offline benchmark" }, PC: { normal: "--s1", high: "--s2", emergency: "--s8" },
+  load() {
+    const K = DATA.rh.cases[S.p3.case]; this.K = K; const cfg = K.config, ft = (p) => [p[0] / FT, p[1] / FT - cfg.ny * cfg.width_ft / 2 / FT, p[2] / FT];
+    this.Cp = K.corridor.pos.map(ft);
+    const g = group("routes"), v = []; for (const [a, b] of K.corridor.edges) { const p = this.V(a), q = this.V(b); v.push(p.x, p.y, p.z, q.x, q.y, q.z); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--lattice"), transparent: true, opacity: 0.4 })));
+    group("lattice"); group("wind"); PART.on = false;
+    const m = this.P3m(); this.drones = m.plans.map((p) => { const d = makeDrone(this.PC[p.prio], 2.2); d.visible = false; g.add(d); return { d, p }; });
+    const last = Math.max(...K.requests.map((r) => r.latest), ...m.plans.map((p) => p.times[p.times.length - 1]));
+    S.anim.tmax = (last + 5) * cfg.dt_min * 60; S.anim.rate = S.anim.tmax / 40; S.anim.t = 0; S.anim.playing = !REDUCED;
+    const a = cEN(0, 0); controls.target.copy(V(a[0], a[1], 30)); const bck = G.toEN(F, -260, -420); camera.position.copy(V(bck[0], bck[1], 260));
+    legend([{ c: "--s1", t: "normal (w = 1)" }, { c: "--s2", t: "high (w = 4)" }, { c: "--s8", t: "emergency (w = 12)" }]);
+    this.results();
+  },
+  P3m() { return this.K.methods[this.M[S.p3.method]]; },
+  V(n, lift = 0) { const p = this.Cp[n], e = cEN(p[0], p[1]); return V(e[0], e[1], Math.max(p[2], 1) + lift); },
+  results() {
+    const K = this.K, c = K.config;
+    $("p3-kpis").innerHTML = `<div class="tw"><table><thead><tr><th>Method</th><th>Served</th><th>Weighted</th><th>Emerg.</th><th>Mean delay</th><th>Max delay</th><th>Re-plans</th><th>Max solve</th></tr></thead><tbody>${this.M.map((m, i) => { const k = K.methods[m].kpis; return `<tr class="click${i === S.p3.method ? " sel" : ""}" data-m="${i}"><td>${this.ML[m]}</td><td class="m">${k.served}/${K.requests.length}</td><td class="m">${fmt(100 * k.weighted_service_rate, 1)}%</td><td class="m">${fmt(100 * k.emergency_service_rate, 0)}%</td><td class="m">${fmt(k.mean_delay, 3)}</td><td class="m">${fmt(k.max_delay, 2)}</td><td class="m">${k.replans}</td><td class="m">${fmt(k.max_wall_sec, 2)} s</td></tr>`; }).join("")}</tbody></table></div>`;
+    document.querySelectorAll("#p3-kpis tr.click").forEach((tr) => tr.onclick = () => { S.p3.method = +tr.dataset.m; renderPanel(); this.load(); });
+    drawer("Paper 3 · request board", `<section class="sec"><h3>Requests over time <span>${this.ML[this.M[S.p3.method]]}</span></h3><canvas class="chart" id="c-board" style="height:300px"></canvas>
+      <p class="note">One row per request, sorted by preferred departure. Pale bar: allowed departure window (preferred → latest). Solid bar: committed flight, coloured by priority. Shaded band: freeze window (dark) and look-ahead (light) of the current roll.</p></section>
+      <section class="sec"><h3>Configuration</h3><div class="eq">Δt = ${c.dt_min} min · roll R = ${c.roll_min} · freeze F = ${c.freeze_min} · look-ahead H = ${c.horizon_min} min · K = ${c.k_paths} paths · resource rule ${c.resource_mode}<br>requests ${c.n_requests} (${c.pattern}) · max hold ${c.max_hold_min} min · reveal lead ${c.lead_min} min${c.wind_speed_mph ? ` · wind ${c.wind_speed_mph} mph toward ${c.wind_direction_deg}°` : ""}</div>
+      <p class="note">Every schedule passed the independent geometry audit (no shared link-time token). Computed by the Python engine: <code>python export_rh_cases.py</code>; add cases there and rebuild with <code>python make_lab.py</code>.</p></section>`);
+  },
+  frame(dt) {
+    const K = this.K, c = K.config, s = S.anim.t / 60 / c.dt_min, method = S.p3.method;
+    for (const { d, p } of this.drones) { const committed = method === 2 || p.commit <= s, T = p.times; if (!committed || s < T[0] || s > T[T.length - 1]) { d.visible = false; continue; }
+      let i = 0; while (i < T.length - 2 && T[i + 1] < s) i++; const f = (s - T[i]) / ((T[i + 1] - T[i]) || 1), a = this.V(p.path[i], 3), b = this.V(p.path[i + 1], 3);
+      d.visible = true; d.position.copy(a.clone().lerp(b, f)); const dd = b.clone().sub(a); if (dd.x || dd.z) d.rotation.y = Math.atan2(-dd.z, dd.x); if (!REDUCED) d.rotors.forEach((r, k) => r.rotation.y += (k % 2 ? 1 : -1) * dt * 40); }
+    const cv = $("c-board"); if (!cv) return; const Rq = K.requests.slice().sort((a, b) => a.pref - b.pref || a.rid - b.rid), tm = S.anim.tmax / 60, byR = {}; this.P3m().plans.forEach((p) => byR[p.rid] = p);
+    const ch = chart(cv, [{ color: "--rule", width: 0, pts: [[0, 0], [tm, Rq.length]] }], { xlab: "Time (min)", ylab: "requests", xmin: 0, xmax: tm, ymin: 0, ymax: Rq.length, vline: S.anim.t / 60 }); if (!ch) return;
+    const ctx = cv.getContext("2d"), now = S.anim.t / 60, rh = Math.max(1, ch.Y(0) - ch.Y(1) - 0.6);
+    if (method !== 2) { const roll = Math.floor(now / c.roll_min) * c.roll_min; ctx.fillStyle = css("--accent"); ctx.globalAlpha = 0.08; ctx.fillRect(ch.X(roll), ch.Y(Rq.length), ch.X(roll + c.horizon_min) - ch.X(roll), ch.Y(0) - ch.Y(Rq.length)); ctx.globalAlpha = 0.18; ctx.fillRect(ch.X(roll), ch.Y(Rq.length), ch.X(roll + c.freeze_min) - ch.X(roll), ch.Y(0) - ch.Y(Rq.length)); ctx.globalAlpha = 1; }
+    Rq.forEach((r, i) => { const y = ch.Y(i + 1); ctx.globalAlpha = r.reveal * c.dt_min > now ? 0.15 : 0.45; ctx.fillStyle = css("--ink-3"); ctx.fillRect(ch.X(r.pref * c.dt_min), y, Math.max(1, ch.X(r.latest * c.dt_min) - ch.X(r.pref * c.dt_min)), rh); ctx.globalAlpha = 1;
+      const p = byR[r.rid]; if (p && (method === 2 || p.commit * c.dt_min <= now)) { ctx.fillStyle = css(this.PC[r.prio]); ctx.fillRect(ch.X(p.times[0] * c.dt_min), y, Math.max(2, ch.X(p.times[p.times.length - 1] * c.dt_min) - ch.X(p.times[0] * c.dt_min)), rh); } });
+  },
+};
+function panelP3() {
+  const cases = DATA.rh.cases.map((k, i) => `<option value="${i}"${S.p3.case === i ? " selected" : ""}>${k.label}</option>`).join("");
+  return `<section class="sec"><h3>Priority rolling-horizon scheduling <span>Paper 3 · notebook 14 Oct 2026</span></h3>
+    <p class="note">Requests are revealed ahead of time. Each roll re-solves a two-stage ILP (max priority-weighted service, then min ground delay + flight time) over the look-ahead and freezes departures inside the commitment window; committed missions keep their full reservation.</p></section>
+  <section class="sec"><h3>Case</h3><div class="row">Case <select id="p3-case">${cases}</select></div>
+    <div class="row">Method <div class="seg">${P3.M.map((m, i) => `<button type="button" data-m="${i}" aria-pressed="${S.p3.method === i}">${P3.ML[m].replace(" benchmark", "")}</button>`).join("")}</div></div>
+    <div class="btns"><button class="btn primary" type="button" id="p3-play">Replay</button></div><div id="p3-kpis"></div>
+    <p class="note">The ILP runs in Python (SciPy/HiGHS) because a browser MILP solver is not available here; this tab replays those exact schedules on the notebook corridor (4 × 1 × 3 modules of 500 × 200 × 100 ft), placed at your Start.</p></section>`;
+}
+function wireP3() {
+  $("p3-case").onchange = (e) => { S.p3.case = +e.target.value; P3.load(); };
+  document.querySelectorAll("#panel [data-m]").forEach((b) => b.onclick = () => { S.p3.method = +b.dataset.m; renderPanel(); P3.load(); });
+  $("p3-play").onclick = () => { S.anim.t = 0; S.anim.playing = true; };
+}
+
+// ===================================================================== tabs, area, loop
+function renderPanel() {
+  const t = S.tab; $("panel").innerHTML = t === "p1" ? panelP1() : t === "p2" ? panelP2() : panelP3();
+  if (t === "p1") wireP1(); else if (t === "p2") wireP2(); else wireP3();
+}
+function go(tab) {
+  S.tab = tab; document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.t === tab));
+  group("routes"); group("closed");
+  if (!S.buildingsOn && tab === "p1" && S.design.preset === "trb") Object.assign(S.design, PRESETS.trr, { preset: "trr", usePaperLength: true });
+  if (!S.buildingsOn && tab === "p2" && S.design.preset === "trr") Object.assign(S.design, PRESETS.trb, { preset: "trb", usePaperLength: true });
+  renderPanel();
+  if (tab === "p3") { P3.load(); return; }
+  rebuild(); frameCamera(); if (tab === "p1") P1.run(); else P2.run();
+}
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => go(b.dataset.t));
+$("dmin").onclick = () => { const d = $("drawer"); d.classList.toggle("min"); $("dmin").textContent = d.classList.contains("min") ? "Show" : "Hide"; };
+const setBld = (on) => { S.buildingsOn = on; $("bld-on").setAttribute("aria-pressed", on); $("bld-off").setAttribute("aria-pressed", !on);
+  const key = on ? "city" : S.tab === "p2" ? "trb" : "trr"; Object.assign(S.design, PRESETS[key], { preset: key, usePaperLength: !on });
+  if (!on && S.p1.exp === "urban") S.p1.exp = "shear";
+  drawCity(); go(S.tab); toast(on ? "City mode: city-scale modules between real buildings." : "Open field: the paper's own geometry, for validation against the published values."); };
+$("bld-on").onclick = () => setBld(true); $("bld-off").onclick = () => setBld(false);
+// place start/goal by clicking the ground
+let placing = 0; const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+$("place").onclick = () => { placing = 1; toast("Click the map to place Start, then Goal."); };
+renderer.domElement.addEventListener("click", (e) => {
+  if (!placing) return; mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(mouse, camera);
+  const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(groundPlane, p)) return; const en = [p.x, -p.z];
+  if (placing === 1) { S.start = en; placing = 2; toast("Now click the Goal."); } else { S.goal = en; placing = 0; S.design.usePaperLength = false; renderPanel(); go(S.tab); toast("Corridor re-laid between your Start and Goal."); }
+});
+// OSM import
+$("osmfile").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return; toast(`Reading ${f.name}…`);
+  try { const city = G.parseOSM(await f.text()); if (!city.buildings.length) throw new Error("no buildings in this file");
+    let mx = [Infinity, Infinity, -Infinity, -Infinity]; city.buildings.forEach((b) => { for (let k = 0; k < b.p.length; k += 2) { mx[0] = Math.min(mx[0], b.p[k]); mx[1] = Math.min(mx[1], b.p[k + 1]); mx[2] = Math.max(mx[2], b.p[k]); mx[3] = Math.max(mx[3], b.p[k + 1]); } });
+    S.city = { name: f.name.replace(/\.(osm|xml)$/i, ""), origin: city.origin, buildings: city.buildings, roads: city.roads };
+    S.start = [mx[0] + (mx[2] - mx[0]) * 0.15, mx[1] + (mx[3] - mx[1]) * 0.2]; S.goal = [mx[0] + (mx[2] - mx[0]) * 0.85, mx[1] + (mx[3] - mx[1]) * 0.8];
+    Object.assign(S.design, PRESETS.city, { preset: "city", usePaperLength: false }); S.buildingsOn = true; drawCity(); go(S.tab === "p3" ? "p1" : S.tab);
+    toast(`${city.buildings.length} buildings loaded. Use Place Start/Goal to set the corridor.`);
+  } catch (err) { toast(`Could not read that file: ${err.message}`); }
+};
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; controls.update();
+  if (S.anim.playing) { S.anim.t += dt * S.anim.rate; if (S.anim.t >= S.anim.tmax) { S.anim.t = S.anim.tmax; S.anim.playing = false; } }
+  if (S.tab === "p1") P1.frame(dt); else if (S.tab === "p2") P2.frame(); else if (P3.K) P3.frame(dt);
+  stepParticles(REDUCED ? 0 : dt); renderer.render(scene, camera); projectPins(); requestAnimationFrame(loop);
+}
+const retheme = () => { drawCity(); go(S.tab); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+requestAnimationFrame(loop);
+drawCity(); initParticles();
+try { go("p1"); } catch (err) { console.error(err); toast("Could not route on this corridor: " + err.message); }
+})();
+</script>

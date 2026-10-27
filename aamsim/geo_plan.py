@@ -56,7 +56,7 @@ def min_energy_route(corr, e_cost, t_cost, origin, destination):
 
 def fly(corr, arcs, t_cost, e_cost, veh):
     t = np.concatenate([[0.0], np.cumsum(t_cost[arcs])])
-    e = np.concatenate([[0.0], np.cumsum(e_cost[arcs])]) + veh.takeoff_energy_j()
+    e = np.concatenate([[0.0], np.cumsum(e_cost[arcs])])
     return t, e
 
 
@@ -65,7 +65,7 @@ def classify(direction_deg, heading_deg):
     return "tailwind" if rel <= 45 else ("headwind" if rel >= 135 else "crosswind")
 
 
-def run_geo_mission(gc, params: WindParams, origin, destination, veh=None, model="crab",
+def run_geo_mission(gc, params: WindParams, origin, destination, veh=None, model="paper",
                     uw=None):
     """Plan with the four beliefs, evaluate in the truth. Returns (rows, routes, uw)."""
     veh = veh or geo_vehicle()

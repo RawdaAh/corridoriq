@@ -18,7 +18,24 @@ All four run on **one shared core**: the same modular corridor lattice, wind fie
    building-aware wind is computed around the real footprints, and missions are planned with the four planning winds and flown in
    the true wind, exactly as in GeoWind2Plan; many-operator SIRE traffic runs on the same city corridor.
 
-**Interactive demos**
+**AAM Corridor Lab — `demo/lab.html` (main interactive tool).** One page per paper, on any OpenStreetMap area:
+
+| Tab | What you can do | Validation |
+|---|---|---|
+| 1 · Wind-aware routing (TRR) | design the corridor (module size, lanes N_W, layers N_H, ceiling, take-off rule); pick the wind: Exp 6.2 shear, 6.3 spatial blocks, 6.4 time-varying with a departure slider, building-aware city wind, or a **live weather profile**; see every Pareto route, the time–energy frontier, altitude-band and block usage (Tables 2, 4, 5), and fly any route | **Table 1, Table 3, Figure 7, Figure 8** re-run in the browser with the published values side by side (TRR preset, open field) |
+| 2 · Airspace configuration (TRB/SIRE) | set demand, **1–10 operators**, forward/reverse split, shared vs direction-separated link key, dispatch window and pattern, tie-break rule, slot Δt, cruise or wind-affected link times; watch requests get booked (green) or rejected (red) at the pads, drones fly their reservations, and the space-time ledger fill | **Exp 1–4 and the equity test** run in a Web Worker; **Exp 2 recommends the smallest airspace (N_W × N_H) that reaches a target success rate** and applies it |
+| 3 · Rolling horizon | replay FCFS, rolling priority ILP and the offline benchmark for several cases on the notebook corridor; request board with the moving freeze/look-ahead window | schedules come from the Python ILP (`export_rh_cases.py`) and pass the independent audit |
+
+Area: *City* uses the loaded OSM buildings (nodes and links that hit a building are removed); *Open field* switches to the paper's own geometry for exact reproduction. **Load .osm area** reads any file exported from openstreetmap.org (Export → Download OSM); **Place Start/Goal** re-lays the corridor where you click. **Live wind**: the page asks Open-Meteo for wind at 10/80/120/180 m when it is opened from disk; the published copy uses the snapshot taken at build time (`python make_lab.py` fetches Open-Meteo, falling back to the U.S. NWS). The browser engine `demo/lab_engine.js` is the twin of the Python package; `tests/test_lab.py` checks it reproduces TRR Table 1 values and makes identical SIRE decisions to Python on 2,000 requests.
+
+```bash
+python export_rh_cases.py      # rolling-horizon schedules (Python ILP)  -> demo/rh_cases.json
+python make_lab.py             # build demo/lab.html (Dallas; fetches the weather snapshot)
+python make_lab.py --osm data/osm/smu_campus.osm.gz --start 32.8395 -96.7890 --goal 32.8445 -96.7790 --name "SMU campus"
+python -c "from aamsim.weather import fetch_profile; print(fetch_profile(32.78, -96.80))"   # live wind profile
+```
+
+**Other demos**
 * `demo/city.html` — 3D Dallas: buildings, roads, your corridor network, wind streamlines, quadcopters flying each planned route,
   Start/Goal markers, wind dial, random tail/head/crosswind missions, energy/altitude/ground-speed/wind-on-track charts, and a
   corridor-traffic mode running the SIRE registry live in the browser.
@@ -40,8 +57,8 @@ python make_geo_demo.py                                         # rebuild demo/c
   for a paper result.
 * `aamsim/geo_plan.py` — the four planning winds (ground truth; a coarse weather-model forecast with a 15° direction error and
   −15% speed bias and no buildings; the height-only profile; zero wind), energy-optimal planning, evaluation in the truth.
-  Crosswinds cost energy through a crab angle (ground speed = √(v² − w⊥²) + w∥), an extension of the TRR projection.
-* `demo/geo_engine.js` — the same wind solver, planner and SIRE registry in JavaScript, so the page recomputes live when the
+  Energy and travel time use the TRR equations exactly (Eq. 20 projection, β = λ²); `model="crab"` is an optional extension in which
+  crosswinds cost energy through a crab angle.
   wind dial moves. `tests/test_geo.py` checks the browser engine against Python (node wind to 1e-12, identical routes up to
   exact ties, identical SIRE accept/reject decisions).
 
@@ -66,7 +83,9 @@ run_rolling_horizon.py    Paper 3 design grid (FCFS / rolling ILP / offline)
 run_wind_belief.py        Bridge experiment: plan with a belief, fly in the truth
 summarize_results.py      prints tables for any result CSV
 make_demo.py              builds demo/index.html (paper replays)
-make_geo_demo.py          builds demo/city.html (3D Dallas: OSM buildings, wind, drones, SIRE traffic)
+make_lab.py               builds demo/lab.html (the AAM Corridor Lab: all three papers on an OSM city)
+export_rh_cases.py        runs rolling-horizon cases with the Python ILP for the lab
+make_geo_demo.py          builds demo/city.html (earlier single-mission city demo)
 run_geo_mission.py        real-city wind-information experiment (OSM buildings)
 aamsim/
   corridor.py             modular prism lattice (edges, face and body diagonals), portals
@@ -80,6 +99,8 @@ aamsim/
   geo.py                  OpenStreetMap buildings, corridor over a real city
   urbanwind.py            building-aware wind surrogate (potential flow + wakes + shear)
   geo_plan.py             four planning winds, energy-optimal routes, evaluation in the truth
+  weather.py              live wind profiles (Open-Meteo 10/80/120/180 m, U.S. NWS fallback)
+demo/lab_engine.js        browser twin of the engine (corridor builder, TRR winds, Pareto, SIRE, OSM import)
 demo/geo_engine.js        browser twin of urbanwind / geo_plan / sire
 data/osm/dallas.osm.gz       OpenStreetMap extract of downtown Dallas (ODbL)
 tests/test_core.py        geometry, reproduction of published values, reservation exclusivity, audit
@@ -198,6 +219,22 @@ Accepted-trip travel time 585 s at low demand and 2.2% inflation at 2,000 trips 
 reproduced exactly and is a unit test.
 
 **Paper 3** — the 50-request pilot of the notebook is reproduced (ILP and offline mean delay 0.016 min, max 0.2 min; all requests served).
+
+## Notes on the TRR equations (implemented exactly as published)
+
+The energy and travel-time model follows TRR Eqs. 10–33 without changes: ground speed by the piecewise rule of Eq. 20,
+λ = v_UAV/v (Eq. 25), β = λ² (Eq. 24), d = d̄λ and e = ēβ (Eqs. 26–27), ē = 20.42 J/ft × L, v_UAV = 35 mph; phase-dependent mode adds
+α_climb = 1 + k sin φ with k = 0.2 and E_TO = 10% of the no-wind route energy (Sec. 5.4). Reproduced: no wind 9.74 min / 0.170 kWh,
+tail 5.50 / 0.054, head 16.29 / 0.477, phase-dependent 0.187 / 0.071 / 0.495 kWh. Points to check in the manuscript:
+
+1. Eq. 23 states E ∝ v_ij², but Eq. 24 uses β = (v_UAV / v_ij)², the inverse. The code follows Eq. 24, which is what the published
+   tables use; the text between Eqs. 21–24 should be reworded so the derivation leads to Eq. 24 (e.g., power at constant airspeed times
+   a flight time that scales with 1/v_ij gives β = λ; the drag-squared argument gives λ²).
+2. Eq. 32 writes sin(θ_ij), but θ_ij is the heading (Eq. 14); the text defines the ascent angle φ_ij (Eq. 31). The code uses φ_ij.
+3. Eqs. 14 and 17b use tan⁻¹(Δy/Δx); the quadrant-aware atan2 is required (and used) for headings and wind directions in all quadrants.
+4. Table 1 reports 6.30 min at 45° and 6.38 min at 315°; the geometry and Eq. 20 are symmetric about the corridor axis, so both give 6.32 min here.
+5. The crosswind-crab model used briefly in an earlier city demo is **not** used anywhere by default; `model="crab"` remains available as an
+   explicit option only.
 
 ## Modelling notes and limits
 

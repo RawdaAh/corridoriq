@@ -175,7 +175,8 @@ class SireEngine:
         lt = np.asarray(link_time_sec, dtype=float)
         if lt.ndim == 1:
             lt = np.broadcast_to(lt, (H + 1, corr.n_arcs))
-        self.tau = lt                                       # (H+1, A) seconds by departure slot
+        # rounded to the microsecond so exact cost ties break identically in the browser twin
+        self.tau = np.round(lt, 6)                          # (H+1, A) seconds by departure slot
         self.q = np.maximum(1, np.ceil(lt / self.cfg.slot_sec - 1e-9)).astype(int)  # Eq. 7
         if self.cfg.conflict_rule == "undirected":
             self.key = corr.arc_edge                        # Eq. 6
