@@ -118,7 +118,7 @@ details .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))
 .pin .b small { font: 500 11px var(--font-body); color: var(--ink-3); margin-left: 4px; }
 .pin .s { width: 2px; height: 30px; background: var(--ink); margin: 0 auto; }
 .pin.to .b { background: var(--ink); color: var(--card); } .pin.to .b small { color: var(--card); opacity: .75; }
-.mapbar { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 6px; box-shadow: 0 4px 20px #0000000f; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 800px); }
+.mapbar { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 6px; box-shadow: 0 4px 20px #0000000f; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 790px); }
 .mapbar .lg { font-size: 11.5px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; padding: 0 6px; flex-wrap: wrap; }
 .mapbar a { color: var(--ink-3); font-size: 11px; }
 .ramp { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--w-lo), var(--w-mid), var(--w-hi)); vertical-align: 1px; }
@@ -150,7 +150,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .hour:focus-vis
 
 <aside class="side" id="left" aria-label="Task"></aside>
 <aside class="side" id="right" aria-label="Results"></aside>
-<div class="mapbar"><button class="btn" type="button" id="m-net" aria-pressed="false">Flight network</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
+<div class="mapbar"><select id="m-wind" aria-label="Wind layer shown" style="width:auto;padding:7px 8px"></select><button class="btn" type="button" id="m-layers" aria-pressed="true">Altitude layers</button><button class="btn" type="button" id="m-net" aria-pressed="false">All links</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
   <span class="lg"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span><span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span><span>wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
 <div class="toast" id="toast"></div>
 
@@ -376,12 +376,39 @@ function describe(k, plan, r) {
 }
 
 // ===================================================================== drawing: corridor, routes, drones, particles
+function label(text, x, y, z, h, ax = 1) {   // text sprite in corridor-local coords (x along, y up, z = -lateral)
+  const c = document.createElement("canvas"), ctx = c.getContext("2d"), fs = 44; ctx.font = `700 ${fs}px Manrope, sans-serif`; const w = Math.ceil(ctx.measureText(text).width) + 28;
+  c.width = w; c.height = fs + 22; const x2 = c.getContext("2d"); x2.font = `700 ${fs}px Manrope, sans-serif`;
+  x2.fillStyle = dark() ? "rgba(20,28,38,.85)" : "rgba(255,255,255,.88)"; x2.beginPath(); x2.roundRect ? x2.roundRect(0, 0, w, c.height, 14) : x2.rect(0, 0, w, c.height); x2.fill();
+  x2.fillStyle = css("--corridor"); x2.textBaseline = "middle"; x2.fillText(text, 14, c.height / 2 + 2);
+  const t = new THREE.CanvasTexture(c), sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  sp.scale.set(h * w / c.height, h, 1); sp.position.set(x, y, z); sp.center.set(ax, 0.5); sp.renderOrder = 10; return sp;
+}
+function windSelect() {
+  const el = $("m-wind"); if (!el || !K) return; const Ls = windLayers(), cur = S.windView ?? "all";
+  el.innerHTML = `<option value="all">Wind: all layers</option>` + Ls.map((z, i) => `<option value="${i}">Wind at ${Math.round(z * FT)} ft</option>`).join("");
+  el.value = cur === "all" || +cur < Ls.length ? String(cur) : "all";
+}
 function drawCorridor() {
   const g = group("corr"), C = K.C, half = C.half, top = C.z_levels[C.z_levels.length - 1];
   const box = new THREE.BoxGeometry(C.L, top, 2 * half); box.translate(C.L / 2, top / 2, 0);
   const m = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.05, depthWrite: false }));
   const e = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.35 }));
+  m.material.opacity = 0.025; e.material.opacity = 0.18;
   const holder = new THREE.Group(); holder.add(m); holder.add(e); holder.position.copy(V(K.F.s[0], K.F.s[1], 0)); holder.rotation.y = K.F.b; g.add(holder);
+  // altitude layers: a sheet per layer with its lanes, labelled with its height
+  const lay = new THREE.Group(); lay.visible = S.layersOn !== false; groups.layers = lay; holder.add(lay);
+  const cC = col("--corridor"), lanes = [];
+  C.z_levels.forEach((z, k) => { if (z <= 0) return; const L0 = -C.L * 0.02, L1 = C.L * 1.02;
+    const sheet = new THREE.Mesh(new THREE.PlaneGeometry(C.L, 2 * half), new THREE.MeshBasicMaterial({ color: cC, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+    sheet.rotation.x = -Math.PI / 2; sheet.position.set(C.L / 2, z, 0); lay.add(sheet);
+    for (let j = 0; j <= C.NW; j++) { const y = j * C.W - half; lanes.push(L0, z, -y, L1, z, -y); }
+    lay.add(label(`${Math.round(z * FT)} ft`, C.L * 1.03, z, half, Math.max(22, C.L / 40), 0));
+  });
+  const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(lanes, 3));
+  lay.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: cC, transparent: true, opacity: 0.45 })));
+  lay.add(label(`${C.NW + 1} lanes × ${C.NH} layers`, C.L / 2, top + Math.max(25, C.L / 30), 0, Math.max(24, C.L / 36), 0.5));
+  windSelect();
   const net = group("net"); net.visible = S.net; const v = []; for (const [a, b] of C.edges) { const p = nodeV(a), q = nodeV(b); v.push(p.x, p.y, p.z, q.x, q.y, q.z); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); net.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.18 })));
   for (const n of [K.o, K.d]) { if (n < 0) continue; const pad = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 0.8, 32), new THREE.MeshLambertMaterial({ color: col("--corridor") })); pad.position.copy(nodeV(n)); pad.position.y = 0.6; g.add(pad);
@@ -419,24 +446,27 @@ function flyFrame(dt) {
     if (!REDUCED) d.rotors.forEach((ro, k) => ro.rotation.y += (k % 2 ? 1 : -1) * dt * 45); d.light.visible = Math.floor(performance.now() / 500) % 2 === 0; }
   if (S.follow && S.drones && S.drones[0]) { const p = S.drones[0].d.position; controls.target.lerp(p, 0.12); camera.position.lerp(p.clone().add(new THREE.Vector3(-160, 140, 170)), 0.06); }
 }
-const PART = { n: 1500, T: 10 };
+const PART = { n: 2000, T: 10 };
 function initParticles() { const g = group("particles"); PART.pos = new Float32Array(PART.n * PART.T * 2); PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
   PART.seg = new Float32Array(PART.n * (PART.T - 1) * 6); PART.col = new Float32Array(PART.n * (PART.T - 1) * 6); PART.geo = new THREE.BufferGeometry();
   PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })); g.add(PART.mesh); }
 const solidAt = (x, y, z) => { const gr = K.C.grid; const i = Math.floor((x - gr.x0) / gr.res), j = Math.floor((y - gr.y0) / gr.res); if (i < 0 || j < 0 || i >= gr.nx || j >= gr.ny) return true; return gr.H[i * gr.ny + j] >= z; };
 function spawn(i, z) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solidAt(x, y, z) && k < 20); for (let t = 0; t < PART.T; t++) { PART.pos[(i * PART.T + t) * 2] = x; PART.pos[(i * PART.T + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = 0; }
 const tmp = [0, 0];
+function windLayers() { return K ? K.C.z_levels.filter((z) => z > 0) : []; }   // corridor altitude layers (m)
 function particles(dt) {
-  const on = S.plan && S.plan.W && S.screen !== "disp" && S.screen !== "val"; PART.mesh.visible = !!on; if (!on) return;
-  const z = (S.windAlt || 300) / FT, bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
-  for (let i = 0; i < PART.n; i++) { PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i] || PART.z !== z) spawn(i, z); const b = i * PART.T * 2;
+  const on = S.plan && S.plan.W && K && S.screen !== "disp" && S.screen !== "val"; PART.mesh.visible = !!on; if (!on) return;
+  const Ls = windLayers(), view = S.windView ?? "all", key = Ls.join(",") + "|" + view;
+  if (PART.key !== key) { PART.zs = new Float32Array(PART.n); for (let i = 0; i < PART.n; i++) { PART.zs[i] = view === "all" ? Ls[i % Ls.length] : Ls[Math.min(+view, Ls.length - 1)]; PART.life[i] = 0; } PART.key = key; }
+  const bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
+  for (let i = 0; i < PART.n; i++) { const z = PART.zs[i]; PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i]) spawn(i, z); const b = i * PART.T * 2;
     for (let k = PART.T - 1; k > 0; k--) { PART.pos[b + 2 * k] = PART.pos[b + 2 * k - 2]; PART.pos[b + 2 * k + 1] = PART.pos[b + 2 * k - 1]; }
-    G.sample(S.plan.W, PART.pos[b], PART.pos[b + 1], z, tmp); PART.pos[b] += tmp[0] * dt * 24; PART.pos[b + 1] += tmp[1] * dt * 24; if (solidAt(PART.pos[b], PART.pos[b + 1], z)) spawn(i, z);
+    G.sample(S.plan.W, PART.pos[b], PART.pos[b + 1], Math.max(z, 10), tmp); PART.pos[b] += tmp[0] * dt * 24; PART.pos[b + 1] += tmp[1] * dt * 24; if (solidAt(PART.pos[b], PART.pos[b + 1], z)) spawn(i, z);
     const f = Math.min(1, Math.hypot(tmp[0], tmp[1]) / vmax), c = f < 0.5 ? ramp[0].clone().lerp(ramp[1], f * 2) : ramp[1].clone().lerp(ramp[2], (f - 0.5) * 2);
     for (let k = 0; k < PART.T - 1; k++) { const s = (i * (PART.T - 1) + k) * 6, e0 = G.toEN(K.F, PART.pos[b + 2 * k], PART.pos[b + 2 * k + 1]), e1 = G.toEN(K.F, PART.pos[b + 2 * k + 2], PART.pos[b + 2 * k + 3]);
       PART.seg[s] = e0[0]; PART.seg[s + 1] = z; PART.seg[s + 2] = -e0[1]; PART.seg[s + 3] = e1[0]; PART.seg[s + 4] = z; PART.seg[s + 5] = -e1[1];
       const cc = bg.clone().lerp(c, 0.25 + 0.75 * (1 - k / (PART.T - 1)) * Math.min(1, PART.age[i] * 2)); PART.col.set([cc.r, cc.g, cc.b, cc.r, cc.g, cc.b], s); } }
-  PART.z = z; PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true;
+  PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true;
 }
 function frameView() { const C = K.C, a = G.toEN(K.F, 0, 0), b = G.toEN(K.F, C.L, 0), mid = V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0), L = Math.max(600, C.L), back = G.toEN(K.F, -0.35 * L, -0.75 * L);
   controls.target.copy(mid.clone().setY(30)); camera.position.copy(V(back[0], back[1], 0.62 * L + 220)); sunFor(mid, L); }
@@ -542,8 +572,8 @@ function rightPlan() {
     </div>
     <div class="verdict ${dE > 0.5 ? "good" : ""}">Wind ${fmt(s400 * MPH, 0)} mph from ${compass(d400)} at 400 ft gives ${feel}. ${dE > 0.5 ? `Planning with the wind uses <b>${fmt(dE, 0)}% less energy</b>${dT > 0.05 ? ` and arrives <b>${fmt(dT * 60, 0)} s sooner</b>` : ""} than a route planned without it (orange).` : "Here the wind-aware route and a calm-air plan are about the same."}</div>
     <div><div class="k" style="font-size:11px;color:var(--ink-3);margin-bottom:4px">Wind on this route (share of flight time)</div>${mixBar(a.mix)}</div></div>
-  <div class="blk"><h2>Along the route</h2><div class="tabs" id="ptabs"><button type="button" data-t="alt" aria-pressed="true">Altitude</button><button type="button" data-t="en" aria-pressed="false">Energy used</button><button type="button" data-t="wind" aria-pressed="false">Wind on the nose</button></div><canvas class="chart" id="pc"></canvas>
-    <p class="note"><span class="sw" style="background:var(--aware)"></span>wind-aware <span class="sw" style="background:var(--naive);margin-left:8px"></span>planned ignoring wind (flown in the real wind)</p></div>
+  <div class="blk"><h2>Along the route</h2><div class="tabs" id="ptabs"><button type="button" data-t="side" aria-pressed="true">Side view</button><button type="button" data-t="alt" aria-pressed="false">Altitude</button><button type="button" data-t="en" aria-pressed="false">Energy used</button><button type="button" data-t="wind" aria-pressed="false">Tail/headwind</button></div><canvas class="chart" id="pc" style="height:190px"></canvas>
+    <p class="note" id="pnote"></p></div>
   <div class="blk"><h2>Other options <small>${pl.R.length} trade-off route${pl.R.length > 1 ? "s" : ""}</small></h2><div class="tw"><table><thead><tr><th>Option</th><th>Time</th><th>Energy</th><th>Battery</th><th>Cruise</th><th>Tail</th></tr></thead><tbody>${opts.map(([k, r]) => { const d = describe(K, pl, r); return `<tr><td>${k}</td><td class="m">${fmt(d.min, 1)} min</td><td class="m">${fmt(d.wh, 1)} Wh</td><td class="m">${fmt(d.batt, 0)}%</td><td class="m">${d.cruise} ft</td><td class="m">${fmt(d.mix.tail, 0)}%</td></tr>`; }).join("")}
     <tr><td style="color:var(--naive)">Ignoring wind</td><td class="m">${fmt(n.min, 1)} min</td><td class="m">${fmt(n.wh, 1)} Wh</td><td class="m">${fmt(n.batt, 0)}%</td><td class="m">${n.cruise} ft</td><td class="m">${fmt(n.mix.tail, 0)}%</td></tr></tbody></table></div>
     <div class="inrow"><button class="btn" type="button" id="replay">▶ Replay flight</button><button class="btn" type="button" id="csvPlan">Download CSV</button></div>
@@ -551,9 +581,32 @@ function rightPlan() {
   <div class="blk" id="extra"></div>`;
   const draw = (t) => { const P0 = profileOf(pl.rec, pl), P1 = profileOf(pl.naive, pl), lab = { alt: "ft", en: "Wh", wind: "mph tailwind (+) / headwind (−)" }[t];
     chart($("pc"), [{ c: "--naive", pts: P1[t], w: 1.8 }, { c: "--aware", pts: P0[t] }], { ylab: lab, xlab: "miles", ymin: t === "alt" || t === "en" ? 0 : undefined }); };
-  draw("alt"); document.querySelectorAll("#ptabs button").forEach((b) => b.onclick = () => { document.querySelectorAll("#ptabs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); draw(b.dataset.t); });
+  const NOTE = { side: `Wind along the corridor at every altitude layer (centre lane): <span class="sw" style="background:#2e9d5b"></span>tailwind <span class="sw" style="background:#d64545;margin-left:6px"></span>headwind, grey = buildings. Lines: <span class="sw" style="background:var(--aware);margin-left:4px"></span>wind-aware route <span class="sw" style="background:var(--naive);margin-left:4px"></span>route ignoring wind.`,
+    other: `<span class="sw" style="background:var(--aware)"></span>wind-aware <span class="sw" style="background:var(--naive);margin-left:8px"></span>planned ignoring wind (flown in the real wind)` };
+  const draw0 = draw; const drawT = (t) => { $("pnote").innerHTML = t === "side" ? NOTE.side : NOTE.other; if (t === "side") sideView($("pc"), pl); else draw0(t); };
+  drawT("side"); document.querySelectorAll("#ptabs button").forEach((b) => b.onclick = () => { document.querySelectorAll("#ptabs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); drawT(b.dataset.t); });
   $("replay").onclick = () => { S.anim.t = 0; S.anim.playing = true; };
   $("csvPlan").onclick = () => saveCSV("corridoriq_flight.csv", [["option", "minutes", "Wh", "battery_pct", "cruise_ft", "miles", "tailwind_pct", "crosswind_pct", "headwind_pct", "climb_descent_pct"]].concat(opts.map(([k, r]) => { const d = describe(K, pl, r); return [k, d.min.toFixed(2), d.wh.toFixed(1), d.batt.toFixed(1), d.cruise, d.miles.toFixed(3), ...["tail", "cross", "head", "vert"].map((x) => d.mix[x].toFixed(1))]; })).concat([["ignoring wind", n.min.toFixed(2), n.wh.toFixed(1), n.batt.toFixed(1), n.cruise, n.miles.toFixed(3), ...["tail", "cross", "head", "vert"].map((x) => n.mix[x].toFixed(1))]]));
+}
+function sideView(cv, pl) {   // vertical section along the corridor: along-wind component at each altitude, buildings, both routes
+  const C = K.C, W = pl.W, r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); cv.width = r.width * dpr; cv.height = r.height * dpr;
+  const x = cv.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, r.width, r.height);
+  const m = { l: 42, r: 8, t: 10, b: 24 }, w = r.width - m.l - m.r, h = r.height - m.t - m.b, top = C.z_levels[C.z_levels.length - 1] * 1.08, nx = 160, nz = 60, o = [0, 0];
+  const X = (xm) => m.l + xm / C.L * w, Y = (zm) => m.t + h - zm / top * h, gr = C.grid;
+  const bh = (xm) => { const i = Math.floor((xm - gr.x0) / gr.res), j = Math.floor((0 - gr.y0) / gr.res); return i < 0 || i >= gr.nx ? 0 : gr.H[i * gr.ny + j]; };
+  const vmax = Math.max(3, ...pl.hw.speed_ms) * 1.1;
+  for (let i = 0; i < nx; i++) { const xm = (i + 0.5) / nx * C.L, hb = bh(xm);
+    for (let k = 0; k < nz; k++) { const zm = (k + 0.5) / nz * top;
+      if (zm <= hb) x.fillStyle = dark() ? "#4a525c" : "#9aa1aa";
+      else { G.sample(W, xm, 0, Math.max(zm, 10), o); const f = Math.max(-1, Math.min(1, o[0] / vmax)), a = Math.abs(f) * 0.85 + 0.05;
+        x.fillStyle = f >= 0 ? `rgba(46,157,91,${a})` : `rgba(214,69,69,${a})`; }
+      x.fillRect(X(i / nx * C.L), Y((k + 1) / nz * top), w / nx + 1, h / nz + 1); } }
+  x.font = `10.5px ${css("--font-mono")}`; x.fillStyle = css("--ink-3"); x.textAlign = "right"; x.strokeStyle = css("--ink-2"); x.setLineDash([3, 3]); x.lineWidth = 0.8;
+  C.z_levels.forEach((z) => { if (z > 0) { x.beginPath(); x.moveTo(m.l, Y(z)); x.lineTo(m.l + w, Y(z)); x.stroke(); } x.fillText(`${Math.round(z * FT)}`, m.l - 5, Y(z) + 3); });
+  x.setLineDash([]); x.textAlign = "center"; for (let k = 0; k <= 4; k++) x.fillText((k / 4 * C.L * FT / 5280).toFixed(2), m.l + k / 4 * w, r.height - 8);
+  x.textAlign = "left"; x.fillStyle = css("--ink-2"); x.font = `11px ${css("--font-body")}`; x.fillText("ft", 2, 10); x.textAlign = "right"; x.fillText("miles", m.l + w, r.height);
+  for (const [rt, c, lw] of [[pl.naive, "--naive", 2], [pl.rec, "--aware", 2.6]]) { x.strokeStyle = css(c); x.lineWidth = lw; x.beginPath();
+    rt.nodes.forEach((n, i) => { const p = C.pos[n]; i ? x.lineTo(X(p[0]), Y(p[2])) : x.moveTo(X(p[0]), Y(p[2])); }); x.stroke(); }
 }
 function mixBar(m) {
   const parts = [["tail", "Tailwind", "--good"], ["cross", "Crosswind", "--ink-3"], ["head", "Headwind", "--bad"], ["vert", "Climb / descent", "--brand"]];
@@ -799,6 +852,8 @@ $("osmfile").onchange = async (e) => { const f = e.target.files[0]; if (!f) retu
     go("plan"); toast(`${c.buildings.length} buildings loaded. Search a place or click the map for From and To.`);
   } catch (err) { toast(`Could not read that file: ${err.message}`); } };
 function updateArea() { $("areaname").textContent = S.city.name; $("areainfo").textContent = `${S.city.buildings.length.toLocaleString()} buildings · ${P.length} places`; }
+$("m-wind").onchange = (e) => { S.windView = e.target.value === "all" ? "all" : +e.target.value; };
+$("m-layers").onclick = () => { S.layersOn = S.layersOn === false; $("m-layers").setAttribute("aria-pressed", S.layersOn); if (groups.layers) groups.layers.visible = S.layersOn; };
 $("m-net").onclick = () => { S.net = !S.net; $("m-net").setAttribute("aria-pressed", S.net); if (groups.net) groups.net.visible = S.net; };
 $("m-follow").onclick = () => { S.follow = !S.follow; $("m-follow").setAttribute("aria-pressed", S.follow); if (!S.follow && K) frameView(); };
 $("m-home").onclick = () => { S.follow = false; $("m-follow").setAttribute("aria-pressed", false); if (K) frameView(); };
