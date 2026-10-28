@@ -316,14 +316,23 @@ function weatherCard() {
 function hoursStrip() {
   return `<div class="hours" id="hours">${S.wx.hours.slice(0, 12).map((hw, i) => { const [s, d] = profileAt(hw, 400 / FT); return `<button type="button" class="hour${S.bestHour === i ? " best" : ""}" data-h="${i}" aria-pressed="${S.hour === i}">${i === 0 ? "Now" : hourLabel(hw.time)}<span style="color:var(--ink-2)">${arrowSVG(d)}</span><b>${fmt(s * MPH, 0)}</b>mph</button>`; }).join("")}</div>`;
 }
-async function liveWeather() {
-  const [lat, lon] = S.city.origin, H = [10, 80, 120, 180];
+async function liveWeather() {   // Open-Meteo (wind at 10/80/120/180 m), then U.S. NWS hourly (surface wind + power law)
+  const [lat, lon] = S.city.origin, H = [10, 80, 120, 180], stamp = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const q = `latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&wind_speed_unit=ms&forecast_days=2&timezone=UTC&hourly=${H.map((h) => "wind_speed_" + h + "m").concat(H.map((h) => "wind_direction_" + h + "m")).join(",")}`;
-  try { const d = await (await fetch("https://api.open-meteo.com/v1/forecast?" + q)).json(); if (d.error) throw new Error(d.reason);
+  const done = (src) => { S.hour = 0; S.wcache = {}; S.bestHour = undefined; toast(`Live forecast loaded from ${src}.`); return true; };
+  try { const r = await fetch("https://api.open-meteo.com/v1/forecast?" + q); const d = await r.json(); if (!r.ok || d.error) throw new Error(d.reason || r.status);
     const now = new Date().toISOString().slice(0, 13); let i0 = d.hourly.time.findIndex((t) => t >= now); if (i0 < 0) i0 = 0;
-    S.wx = { source: "Open-Meteo forecast", fetched: "live", heights_m: H, hours: d.hourly.time.slice(i0, i0 + 24).map((t, k) => ({ time: t + "Z", speed_ms: H.map((h) => d.hourly["wind_speed_" + h + "m"][i0 + k]), dir_from_deg: H.map((h) => d.hourly["wind_direction_" + h + "m"][i0 + k]) })) };
-    S.hour = 0; S.wcache = {}; toast("Live forecast loaded."); return true;
-  } catch (e) { toast("This published copy can't reach weather services, so it uses the forecast captured when it was built. Open the file locally for live updates."); return false; }
+    S.wx = { source: "Open-Meteo forecast", fetched: "live at " + stamp(), heights_m: H, hours: d.hourly.time.slice(i0, i0 + 24).map((t, k) => ({ time: t + "Z", speed_ms: H.map((h) => d.hourly["wind_speed_" + h + "m"][i0 + k]), dir_from_deg: H.map((h) => d.hourly["wind_direction_" + h + "m"][i0 + k]) })) };
+    return done("Open-Meteo");
+  } catch (e1) {
+    try { const pt = await (await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lon.toFixed(4)}`)).json();
+      const per = (await (await fetch(pt.properties.forecastHourly)).json()).properties.periods.slice(0, 24);
+      const CMP = { N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5, S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5 };
+      S.wx = { source: "U.S. National Weather Service hourly forecast", fetched: "live at " + stamp(), heights_m: H, hours: per.map((p) => { const s10 = parseFloat(String(p.windSpeed)) * 0.44704, d = CMP[p.windDirection] ?? 0;
+        return { time: p.startTime, speed_ms: H.map((h) => s10 * Math.pow(h / 10, 0.25)), dir_from_deg: H.map(() => d) }; }) };
+      return done("the National Weather Service");
+    } catch (e2) { toast("Couldn't reach a weather service from this copy (no internet, or the page blocks outside requests). Using the forecast captured when it was built."); return false; }
+  }
 }
 
 // ===================================================================== wind field (building-aware), cached by direction
@@ -354,9 +363,16 @@ function describe(k, plan, r) {
   const C = k.C, dist = r.arcs.reduce((s, a) => s + C.len[a], 0), alts = r.nodes.map((n) => C.pos[n][2] * FT), tAir = [];
   for (let i = 0; i < r.nodes.length - 1; i++) tAir.push([0.5 * (alts[i] + alts[i + 1]), r.T[i + 1] - r.T[i]]);
   const cruise = Object.entries(tAir.reduce((m, [a, t]) => { const key = Math.round(a / 50) * 50; m[key] = (m[key] || 0) + t; return m; }, {})).sort((a, b) => b[1] - a[1])[0][0];
-  let tw = 0, tt = 0; for (let i = 0; i < r.arcs.length; i++) { const a = r.arcs[i], p = C.pos[C.af[a]], q = C.pos[C.at[a]], hx = q[0] - p[0], hy = q[1] - p[1], hh = Math.hypot(hx, hy); if (hh < 1) continue;
-    const u = 0.5 * (plan.wind.bins[0].u[C.af[a]] + plan.wind.bins[0].u[C.at[a]]), v = 0.5 * (plan.wind.bins[0].v[C.af[a]] + plan.wind.bins[0].v[C.at[a]]), dt = r.T[i + 1] - r.T[i]; tw += (u * hx + v * hy) / hh * dt; tt += dt; }
-  return { miles: dist * FT / 5280, min: r.time / 60, wh: r.energy / 3600, batt: 100 * r.energy / 3600 / S.veh.battery_wh, cruise: +cruise, along: tt ? tw / tt : 0, maxAlt: Math.max(...alts) };
+  // wind type on every leg, same rule as the routing model: angle between the wind and the leg <= 45 deg tailwind, >= 135 deg headwind, else crosswind
+  let tw = 0, tt = 0; const mix = { tail: 0, cross: 0, head: 0, vert: 0 }; let all = 0;
+  for (let i = 0; i < r.arcs.length; i++) { const a = r.arcs[i], p = C.pos[C.af[a]], q = C.pos[C.at[a]], hx = q[0] - p[0], hy = q[1] - p[1], hh = Math.hypot(hx, hy), dt = r.T[i + 1] - r.T[i]; all += dt;
+    if (hh < 1) { mix.vert += dt; continue; }
+    const u = 0.5 * (plan.wind.bins[0].u[C.af[a]] + plan.wind.bins[0].u[C.at[a]]), v = 0.5 * (plan.wind.bins[0].v[C.af[a]] + plan.wind.bins[0].v[C.at[a]]), ws = Math.hypot(u, v);
+    tw += (u * hx + v * hy) / hh * dt; tt += dt;
+    const g = ws < 0.5 ? 90 : Math.acos(Math.max(-1, Math.min(1, (u * hx + v * hy) / (hh * ws)))) * 180 / Math.PI;
+    mix[g <= 45 ? "tail" : g >= 135 ? "head" : "cross"] += dt; }
+  for (const k of Object.keys(mix)) mix[k] = all ? 100 * mix[k] / all : 0;
+  return { miles: dist * FT / 5280, min: r.time / 60, wh: r.energy / 3600, batt: 100 * r.energy / 3600 / S.veh.battery_wh, cruise: +cruise, along: tt ? tw / tt : 0, maxAlt: Math.max(...alts), mix };
 }
 
 // ===================================================================== drawing: corridor, routes, drones, particles
@@ -470,6 +486,7 @@ function leftPlan() {
     ${weatherCard()}<div class="inrow"><button class="btn" type="button" id="live">↻ Live forecast</button><button class="btn" type="button" id="best">Best time to leave</button></div></div>
   <div class="blk"><h2><span><span class="step">3</span>Priority</span></h2>
     <div class="seg"><button type="button" data-p="fastest" aria-pressed="${S.priority === "fastest"}">Fastest</button><button type="button" data-p="balanced" aria-pressed="${S.priority === "balanced"}">Balanced</button><button type="button" data-p="efficient" aria-pressed="${S.priority === "efficient"}">Lowest energy</button></div>
+    <p class="note">${{ fastest: "Minimize flight time; energy is the tie-breaker.", balanced: "Best trade-off: equal weight on time and energy.", efficient: "Minimize energy (battery use); time is the tie-breaker." }[S.priority]} Every trade-off route is listed under Other options.</p>
     <button class="btn go" type="button" id="planBtn">Plan flight</button>
     ${settingsBlock()}</div>`;
 }
@@ -523,11 +540,12 @@ function rightPlan() {
       <div class="metric"><div class="k">Energy</div><div class="v">${fmt(a.wh, 1)} <small>Wh</small></div><div class="d">${fmt(a.batt, 0)}% of a ${S.veh.battery_wh} Wh battery</div></div>
       <div class="metric"><div class="k">Wind effect</div><div class="v ${windEff > 0 ? "up" : "down"}">${windEff > 0 ? "+" : ""}${fmt(windEff, 0)}<small>% energy</small></div><div class="d">vs the same trip in calm air</div></div>
     </div>
-    <div class="verdict ${dE > 0.5 ? "good" : ""}">Wind ${fmt(s400 * MPH, 0)} mph from ${compass(d400)} at 400 ft gives ${feel}. ${dE > 0.5 ? `Planning with the wind uses <b>${fmt(dE, 0)}% less energy</b>${dT > 0.05 ? ` and arrives <b>${fmt(dT * 60, 0)} s sooner</b>` : ""} than a route planned without it (orange).` : "Here the wind-aware route and a calm-air plan are about the same."}</div></div>
+    <div class="verdict ${dE > 0.5 ? "good" : ""}">Wind ${fmt(s400 * MPH, 0)} mph from ${compass(d400)} at 400 ft gives ${feel}. ${dE > 0.5 ? `Planning with the wind uses <b>${fmt(dE, 0)}% less energy</b>${dT > 0.05 ? ` and arrives <b>${fmt(dT * 60, 0)} s sooner</b>` : ""} than a route planned without it (orange).` : "Here the wind-aware route and a calm-air plan are about the same."}</div>
+    <div><div class="k" style="font-size:11px;color:var(--ink-3);margin-bottom:4px">Wind on this route (share of flight time)</div>${mixBar(a.mix)}</div></div>
   <div class="blk"><h2>Along the route</h2><div class="tabs" id="ptabs"><button type="button" data-t="alt" aria-pressed="true">Altitude</button><button type="button" data-t="en" aria-pressed="false">Energy used</button><button type="button" data-t="wind" aria-pressed="false">Wind on the nose</button></div><canvas class="chart" id="pc"></canvas>
     <p class="note"><span class="sw" style="background:var(--aware)"></span>wind-aware <span class="sw" style="background:var(--naive);margin-left:8px"></span>planned ignoring wind (flown in the real wind)</p></div>
-  <div class="blk"><h2>Other options <small>${pl.R.length} trade-off route${pl.R.length > 1 ? "s" : ""}</small></h2><div class="tw"><table><thead><tr><th>Option</th><th>Time</th><th>Energy</th><th>Battery</th><th>Cruise</th></tr></thead><tbody>${opts.map(([k, r]) => { const d = describe(K, pl, r); return `<tr><td>${k}</td><td class="m">${fmt(d.min, 1)} min</td><td class="m">${fmt(d.wh, 1)} Wh</td><td class="m">${fmt(d.batt, 0)}%</td><td class="m">${d.cruise} ft</td></tr>`; }).join("")}
-    <tr><td style="color:var(--naive)">Ignoring wind</td><td class="m">${fmt(n.min, 1)} min</td><td class="m">${fmt(n.wh, 1)} Wh</td><td class="m">${fmt(n.batt, 0)}%</td><td class="m">${n.cruise} ft</td></tr></tbody></table></div>
+  <div class="blk"><h2>Other options <small>${pl.R.length} trade-off route${pl.R.length > 1 ? "s" : ""}</small></h2><div class="tw"><table><thead><tr><th>Option</th><th>Time</th><th>Energy</th><th>Battery</th><th>Cruise</th><th>Tail</th></tr></thead><tbody>${opts.map(([k, r]) => { const d = describe(K, pl, r); return `<tr><td>${k}</td><td class="m">${fmt(d.min, 1)} min</td><td class="m">${fmt(d.wh, 1)} Wh</td><td class="m">${fmt(d.batt, 0)}%</td><td class="m">${d.cruise} ft</td><td class="m">${fmt(d.mix.tail, 0)}%</td></tr>`; }).join("")}
+    <tr><td style="color:var(--naive)">Ignoring wind</td><td class="m">${fmt(n.min, 1)} min</td><td class="m">${fmt(n.wh, 1)} Wh</td><td class="m">${fmt(n.batt, 0)}%</td><td class="m">${n.cruise} ft</td><td class="m">${fmt(n.mix.tail, 0)}%</td></tr></tbody></table></div>
     <div class="inrow"><button class="btn" type="button" id="replay">▶ Replay flight</button><button class="btn" type="button" id="csvPlan">Download CSV</button></div>
     <p class="note">Computed in ${fmt(pl.ms / 1000, 1)} s on a ${K.C.NW + 1}-lane, ${K.C.NH}-layer corridor (${K.C.removed_links} links closed by buildings).</p></div>
   <div class="blk" id="extra"></div>`;
@@ -535,7 +553,12 @@ function rightPlan() {
     chart($("pc"), [{ c: "--naive", pts: P1[t], w: 1.8 }, { c: "--aware", pts: P0[t] }], { ylab: lab, xlab: "miles", ymin: t === "alt" || t === "en" ? 0 : undefined }); };
   draw("alt"); document.querySelectorAll("#ptabs button").forEach((b) => b.onclick = () => { document.querySelectorAll("#ptabs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); draw(b.dataset.t); });
   $("replay").onclick = () => { S.anim.t = 0; S.anim.playing = true; };
-  $("csvPlan").onclick = () => saveCSV("corridoriq_flight.csv", [["option", "minutes", "Wh", "battery_pct", "cruise_ft", "miles"]].concat(opts.map(([k, r]) => { const d = describe(K, pl, r); return [k, d.min.toFixed(2), d.wh.toFixed(1), d.batt.toFixed(1), d.cruise, d.miles.toFixed(3)]; })).concat([["ignoring wind", n.min.toFixed(2), n.wh.toFixed(1), n.batt.toFixed(1), n.cruise, n.miles.toFixed(3)]]));
+  $("csvPlan").onclick = () => saveCSV("corridoriq_flight.csv", [["option", "minutes", "Wh", "battery_pct", "cruise_ft", "miles", "tailwind_pct", "crosswind_pct", "headwind_pct", "climb_descent_pct"]].concat(opts.map(([k, r]) => { const d = describe(K, pl, r); return [k, d.min.toFixed(2), d.wh.toFixed(1), d.batt.toFixed(1), d.cruise, d.miles.toFixed(3), ...["tail", "cross", "head", "vert"].map((x) => d.mix[x].toFixed(1))]; })).concat([["ignoring wind", n.min.toFixed(2), n.wh.toFixed(1), n.batt.toFixed(1), n.cruise, n.miles.toFixed(3), ...["tail", "cross", "head", "vert"].map((x) => n.mix[x].toFixed(1))]]));
+}
+function mixBar(m) {
+  const parts = [["tail", "Tailwind", "--good"], ["cross", "Crosswind", "--ink-3"], ["head", "Headwind", "--bad"], ["vert", "Climb / descent", "--brand"]];
+  return `<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--rule)">${parts.map(([k, , c]) => m[k] > 0.5 ? `<i style="width:${m[k]}%;background:var(${c})"></i>` : "").join("")}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--ink-2);margin-top:5px">${parts.map(([k, l, c]) => `<span><span class="sw" style="background:var(${c})"></span>${l} ${fmt(m[k], 0)}%</span>`).join("")}</div>`;
 }
 function profileOf(r, pl) { const C = K.C, x = [0]; for (let i = 0; i < r.arcs.length; i++) x.push(x[i] + C.len[r.arcs[i]] * FT / 5280);
   const alt = r.nodes.map((n, i) => [x[i], C.pos[n][2] * FT]), en = r.E.map((e, i) => [x[i], e / 3600]), wind = [];
