@@ -150,8 +150,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, .hour:focus-vis
 
 <aside class="side" id="left" aria-label="Task"></aside>
 <aside class="side" id="right" aria-label="Results"></aside>
-<div class="mapbar"><select id="m-wind" aria-label="Wind layer shown" style="width:auto;padding:7px 8px"></select><button class="btn" type="button" id="m-layers" aria-pressed="true">Altitude layers</button><button class="btn" type="button" id="m-net" aria-pressed="false">All links</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
-  <span class="lg"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span><span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span><span>wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
+<div class="mapbar"><select id="m-view" aria-label="What to show" style="width:auto;padding:7px 8px"><option value="layers">View: corridor layers</option><option value="network">View: full network design</option><option value="route">View: chosen route only</option></select><select id="m-wind" aria-label="Wind layer shown" style="width:auto;padding:7px 8px"></select><button class="btn" type="button" id="m-wtype" aria-pressed="false">Wind type on route</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
+  <span class="lg"><span id="lg-plan"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span> <span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span></span><span id="lg-wtype" style="display:none"><span class="sw" style="background:#2e9d5b"></span>tailwind <span class="sw" style="background:#8a929c;margin-left:6px"></span>crosswind <span class="sw" style="background:#d64545;margin-left:6px"></span>headwind <span class="sw" style="background:var(--brand);margin-left:6px"></span>climb/descent</span><span id="netlegend" style="display:none"></span><span id="lg-wind">wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
 <div class="toast" id="toast"></div>
 
 <script>/*__ENGINE__*/</script>
@@ -386,18 +386,26 @@ function label(text, x, y, z, h, ax = 1) {   // text sprite in corridor-local co
 }
 function windSelect() {
   const el = $("m-wind"); if (!el || !K) return; const Ls = windLayers(), cur = S.windView ?? "all";
-  el.innerHTML = `<option value="all">Wind: all layers</option>` + Ls.map((z, i) => `<option value="${i}">Wind at ${Math.round(z * FT)} ft</option>`).join("");
-  el.value = cur === "all" || +cur < Ls.length ? String(cur) : "all";
+  el.innerHTML = `<option value="all">Wind: all layers</option><option value="off">Wind: hide</option>` + Ls.map((z, i) => `<option value="${i}">Wind at ${Math.round(z * FT)} ft</option>`).join("");
+  el.value = cur === "all" || cur === "off" || +cur < Ls.length ? String(cur) : "all";
+}
+const NET_TYPES = [["along", "Along the corridor", "#1a7bdc"], ["lateral", "Lane change", "#1baf7a"], ["vertical", "Climb / descent", "#6250d6"], ["face", "Diagonal", "#e8811a"], ["body", "3D diagonal", "#e87ba4"]];
+function applyView() {
+  const v = S.view || "layers";
+  if (groups.layers) groups.layers.visible = v === "layers"; if (groups.net) groups.net.visible = v === "network";
+  (groups.box || []).forEach((o) => o.visible = v !== "route"); (S.naiveObjs || []).forEach((o) => o.visible = v !== "route");
+  $("netlegend").style.display = v === "network" ? "" : "none"; $("lg-wtype").style.display = S.windColor ? "" : "none";
+  $("lg-plan").style.display = v === "network" || (v === "route" && S.windColor) ? "none" : ""; $("lg-wind").style.display = (S.windView ?? "all") === "off" ? "none" : "";
 }
 function drawCorridor() {
   const g = group("corr"), C = K.C, half = C.half, top = C.z_levels[C.z_levels.length - 1];
   const box = new THREE.BoxGeometry(C.L, top, 2 * half); box.translate(C.L / 2, top / 2, 0);
   const m = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.05, depthWrite: false }));
   const e = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.35 }));
-  m.material.opacity = 0.025; e.material.opacity = 0.18;
+  m.material.opacity = 0.025; e.material.opacity = 0.18; groups.box = [m, e];
   const holder = new THREE.Group(); holder.add(m); holder.add(e); holder.position.copy(V(K.F.s[0], K.F.s[1], 0)); holder.rotation.y = K.F.b; g.add(holder);
   // altitude layers: a sheet per layer with its lanes, labelled with its height
-  const lay = new THREE.Group(); lay.visible = S.layersOn !== false; groups.layers = lay; holder.add(lay);
+  const lay = new THREE.Group(); groups.layers = lay; holder.add(lay);
   const cC = col("--corridor"), lanes = [];
   C.z_levels.forEach((z, k) => { if (z <= 0) return; const L0 = -C.L * 0.02, L1 = C.L * 1.02;
     const sheet = new THREE.Mesh(new THREE.PlaneGeometry(C.L, 2 * half), new THREE.MeshBasicMaterial({ color: cC, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
@@ -409,8 +417,20 @@ function drawCorridor() {
   lay.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: cC, transparent: true, opacity: 0.45 })));
   lay.add(label(`${C.NW + 1} lanes × ${C.NH} layers`, C.L / 2, top + Math.max(25, C.L / 30), 0, Math.max(24, C.L / 36), 0.5));
   windSelect();
-  const net = group("net"); net.visible = S.net; const v = []; for (const [a, b] of C.edges) { const p = nodeV(a), q = nodeV(b); v.push(p.x, p.y, p.z, q.x, q.y, q.z); }
-  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); net.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: col("--corridor"), transparent: true, opacity: 0.18 })));
+  setTimeout(applyView, 0);
+  // full network design: every link by type, the nodes, the take-off/landing pads, and links removed by buildings
+  const net = group("net"), cnt = {}, buf = {}, LT = NET_TYPES;
+  const kind = (p, q) => { const n = [Math.abs(q[0] - p[0]) > 1e-6, Math.abs(q[1] - p[1]) > 1e-6, Math.abs(q[2] - p[2]) > 1e-6], c = n.filter(Boolean).length; return c === 3 ? "body" : c === 2 ? "face" : n[0] ? "along" : n[1] ? "lateral" : "vertical"; };
+  const keyOf = (p, q) => { const a = p.map((v) => v.toFixed(2)).join(","), b = q.map((v) => v.toFixed(2)).join(","); return a < b ? a + "|" + b : b + "|" + a; }, kept = new Set();
+  for (const [a, b] of C.edges) { const t = kind(C.pos[a], C.pos[b]), P = nodeV(a), Q = nodeV(b); (buf[t] = buf[t] || []).push(P.x, P.y, P.z, Q.x, Q.y, Q.z); cnt[t] = (cnt[t] || 0) + 1; kept.add(keyOf(C.pos[a], C.pos[b])); }
+  for (const [t, , c] of LT) if (buf[t]) { const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.Float32BufferAttribute(buf[t], 3)); net.add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: new THREE.Color(c), transparent: true, opacity: t === "along" || t === "vertical" || t === "lateral" ? 0.85 : 0.5 }))); }
+  const open = G.buildCorridor(Object.assign({}, K.spec), null), bl = [], toV = (p) => { const e = G.toEN(K.F, p[0], p[1]); return V(e[0], e[1], Math.max(p[2], 1.5)); };
+  for (const [a, b] of open.edges) { const p = open.pos[a], q = open.pos[b]; if (kept.has(keyOf(p, q))) continue; const P = toV(p), Q = toV(q); bl.push(P.x, P.y, P.z, Q.x, Q.y, Q.z); }
+  if (bl.length) { const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.Float32BufferAttribute(bl, 3)); net.add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xd13b3b, transparent: true, opacity: 0.22 }))); }
+  const nr = Math.max(1.6, C.W / 28), nodes = new THREE.InstancedMesh(new THREE.SphereGeometry(nr, 8, 6), new THREE.MeshLambertMaterial({ color: 0x3b4048 }), C.pos.length), M = new THREE.Matrix4();
+  C.pos.forEach((p, n) => { M.makeTranslation(...nodeV(n).toArray()); nodes.setMatrixAt(n, M); nodes.setColorAt(n, new THREE.Color(p[2] === 0 ? css("--corridor") : "#3b4048")); }); net.add(nodes);
+  K.netCount = { types: cnt, blocked: bl.length / 6, nodes: C.pos.length, pads: C.origins.length + C.destinations.length };
+  $("netlegend").innerHTML = LT.filter(([t]) => cnt[t]).map(([t, l, c]) => `<span><span class="sw" style="background:${c}"></span>${l} ${cnt[t]}</span>`).join(" ") + ` <span><span class="sw" style="background:#d13b3b;opacity:.5"></span>removed by buildings ${bl.length / 6}</span>`;
   for (const n of [K.o, K.d]) { if (n < 0) continue; const pad = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 0.8, 32), new THREE.MeshLambertMaterial({ color: col("--corridor") })); pad.position.copy(nodeV(n)); pad.position.y = 0.6; g.add(pad);
     const h = new THREE.Mesh(new THREE.RingGeometry(6, 9, 4, 1, 0, Math.PI * 2), new THREE.MeshBasicMaterial({ color: 0xffffff })); h.rotation.x = -Math.PI / 2; h.position.copy(pad.position); h.position.y = 1.1; g.add(h); }
 }
@@ -433,11 +453,22 @@ function droneGeos(s) {
   return { color: mergeAll(col), frame: mergeAll(fr) };
 }
 function tube(nodes, c, r, op) { const pts = nodes.map((n) => nodeV(n, 2)); return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.05), Math.max(40, pts.length * 10), r, 10, false), new THREE.MeshLambertMaterial({ color: col(c), transparent: op < 1, opacity: op })); }
+function arcWind(C, wind, a) {   // tailwind / crosswind / headwind on one link, same rule as the routing model
+  const p = C.pos[C.af[a]], q = C.pos[C.at[a]], hx = q[0] - p[0], hy = q[1] - p[1], hh = Math.hypot(hx, hy); if (hh < 1) return "vert";
+  const u = 0.5 * (wind.bins[0].u[C.af[a]] + wind.bins[0].u[C.at[a]]), v = 0.5 * (wind.bins[0].v[C.af[a]] + wind.bins[0].v[C.at[a]]), ws = Math.hypot(u, v); if (ws < 0.5) return "cross";
+  const g = Math.acos(Math.max(-1, Math.min(1, (u * hx + v * hy) / (hh * ws)))) * 180 / Math.PI; return g <= 45 ? "tail" : g >= 135 ? "head" : "cross";
+}
 function drawPlan() {
   const g = group("routes"), pl = S.plan; S.drones = []; if (!pl || pl.error) return;
-  g.add(tube(pl.naive.nodes, "--naive", 2.4, 0.75)); g.add(tube(pl.rec.nodes, "--aware", 3.4, 0.95));
+  const nt = tube(pl.naive.nodes, "--naive", 2.4, 0.75); g.add(nt); S.naiveObjs = [nt];
+  if (S.windColor) { const WC = { tail: "#2e9d5b", cross: "#8a929c", head: "#d64545", vert: css("--brand") }, C = K.C;
+    pl.rec.arcs.forEach((a, i) => { const t = arcWind(C, pl.wind, a), P = nodeV(pl.rec.nodes[i], 2), Q = nodeV(pl.rec.nodes[i + 1], 2);
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(P, Q), 2, 3.6, 10, false), new THREE.MeshLambertMaterial({ color: new THREE.Color(WC[t]) })));
+      const j = new THREE.Mesh(new THREE.SphereGeometry(3.6, 10, 8), new THREE.MeshLambertMaterial({ color: new THREE.Color(WC[t]) })); j.position.copy(Q); g.add(j); }); }
+  else g.add(tube(pl.rec.nodes, "--aware", 3.4, 0.95));
   const s = Math.max(3.5, Math.min(9, K.C.L / 350));
-  for (const [r, c] of [[pl.rec, "--aware"], [pl.naive, "--naive"]]) { const d = makeDrone(c, s); g.add(d); S.drones.push({ d, r, s }); }
+  for (const [r, c] of [[pl.rec, "--aware"], [pl.naive, "--naive"]]) { const d = makeDrone(c, s); g.add(d); S.drones.push({ d, r, s }); if (r === pl.naive) S.naiveObjs.push(d); }
+  applyView();
   S.anim.tmax = Math.max(pl.rec.time, pl.naive.time) + 3; S.anim.rate = S.anim.tmax / 16; S.anim.t = 0; S.anim.playing = !REDUCED;
 }
 function flyFrame(dt) {
@@ -455,7 +486,7 @@ function spawn(i, z) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math
 const tmp = [0, 0];
 function windLayers() { return K ? K.C.z_levels.filter((z) => z > 0) : []; }   // corridor altitude layers (m)
 function particles(dt) {
-  const on = S.plan && S.plan.W && K && S.screen !== "disp" && S.screen !== "val"; PART.mesh.visible = !!on; if (!on) return;
+  const on = S.plan && S.plan.W && K && S.screen !== "disp" && S.screen !== "val" && S.windView !== "off"; PART.mesh.visible = !!on; if (!on) return;
   const Ls = windLayers(), view = S.windView ?? "all", key = Ls.join(",") + "|" + view;
   if (PART.key !== key) { PART.zs = new Float32Array(PART.n); for (let i = 0; i < PART.n; i++) { PART.zs[i] = view === "all" ? Ls[i % Ls.length] : Ls[Math.min(+view, Ls.length - 1)]; PART.life[i] = 0; } PART.key = key; }
   const bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
@@ -852,9 +883,9 @@ $("osmfile").onchange = async (e) => { const f = e.target.files[0]; if (!f) retu
     go("plan"); toast(`${c.buildings.length} buildings loaded. Search a place or click the map for From and To.`);
   } catch (err) { toast(`Could not read that file: ${err.message}`); } };
 function updateArea() { $("areaname").textContent = S.city.name; $("areainfo").textContent = `${S.city.buildings.length.toLocaleString()} buildings · ${P.length} places`; }
-$("m-wind").onchange = (e) => { S.windView = e.target.value === "all" ? "all" : +e.target.value; };
-$("m-layers").onclick = () => { S.layersOn = S.layersOn === false; $("m-layers").setAttribute("aria-pressed", S.layersOn); if (groups.layers) groups.layers.visible = S.layersOn; };
-$("m-net").onclick = () => { S.net = !S.net; $("m-net").setAttribute("aria-pressed", S.net); if (groups.net) groups.net.visible = S.net; };
+$("m-wind").onchange = (e) => { S.windView = e.target.value === "all" || e.target.value === "off" ? e.target.value : +e.target.value; applyView(); };
+$("m-view").onchange = (e) => { S.view = e.target.value; applyView(); };
+$("m-wtype").onclick = () => { S.windColor = !S.windColor; $("m-wtype").setAttribute("aria-pressed", S.windColor); if (S.screen === "plan" && S.plan && !S.plan.error) { const t = S.anim.t, pl = S.anim.playing; drawPlan(); S.anim.t = t; S.anim.playing = pl; } applyView(); };
 $("m-follow").onclick = () => { S.follow = !S.follow; $("m-follow").setAttribute("aria-pressed", S.follow); if (!S.follow && K) frameView(); };
 $("m-home").onclick = () => { S.follow = false; $("m-follow").setAttribute("aria-pressed", false); if (K) frameView(); };
 let last = performance.now();
