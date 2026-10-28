@@ -381,6 +381,14 @@ function makeDrone(c, s) {
   const light = new THREE.Mesh(new THREE.SphereGeometry(0.35 * s, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3b3b })); light.position.set(-1.4 * s, 0.2 * s, 0); g.add(light); g.light = light;
   return g;
 }
+// quadcopter shape for instanced fleets: coloured body + rotor discs, dark arms + props (two merged geometries)
+function droneGeos(s) {
+  const put = (geo, x, y, z, ry = 0) => { geo.rotateY(ry); geo.translate(x * s, y * s, z * s); return geo; }, col = [], fr = [];
+  col.push(put(new THREE.BoxGeometry(2.6 * s, 0.7 * s, 1.6 * s), 0, 0, 0));
+  for (const a of [Math.PI / 4, 3 * Math.PI / 4]) fr.push(put(new THREE.BoxGeometry(6 * s, 0.22 * s, 0.32 * s), 0, 0, 0, a));
+  for (const [x, z] of [[2.1, 2.1], [-2.1, 2.1], [2.1, -2.1], [-2.1, -2.1]]) { col.push(put(new THREE.CylinderGeometry(1.45 * s, 1.45 * s, 0.08 * s, 20), x, 0.55, z)); fr.push(put(new THREE.CylinderGeometry(0.22 * s, 0.22 * s, 0.6 * s, 8), x, 0.3, z)); }
+  return { color: mergeAll(col), frame: mergeAll(fr) };
+}
 function tube(nodes, c, r, op) { const pts = nodes.map((n) => nodeV(n, 2)); return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.05), Math.max(40, pts.length * 10), r, 10, false), new THREE.MeshLambertMaterial({ color: col(c), transparent: op < 1, opacity: op })); }
 function drawPlan() {
   const g = group("routes"), pl = S.plan; S.drones = []; if (!pl || pl.error) return;
@@ -603,8 +611,9 @@ function runCapacity() {
   drawFleet(); rightCap();
 }
 function drawFleet() {
-  const g = group("routes"), R = S.capRun, acc = R.res.map((r, i) => r.ok ? i : -1).filter((i) => i >= 0), s = Math.max(2.5, Math.min(6, K.C.L / 500));
-  const geo = new THREE.BoxGeometry(5 * s, 0.9 * s, 5 * s), mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, acc.length));
+  const g = group("routes"), R = S.capRun, acc = R.res.map((r, i) => r.ok ? i : -1).filter((i) => i >= 0), s = Math.max(2.5, Math.min(5, K.C.L / 550));
+  const n = Math.max(1, acc.length), G2 = droneGeos(s), mesh = new THREE.InstancedMesh(G2.color, new THREE.MeshLambertMaterial({ color: 0xffffff }), n), frame = new THREE.InstancedMesh(G2.frame, new THREE.MeshLambertMaterial({ color: 0x2a2f36 }), n);
+  frame.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.add(frame); R.frame = frame;
   acc.forEach((i, j) => mesh.setColorAt(j, col(OPS[(R.trips[i].op - 1) % 10]))); if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.add(mesh);
   R.mesh = mesh; R.acc = acc; R.rings = [...K.C.origins, ...K.C.destinations].map((n) => { const ok = new THREE.Mesh(new THREE.RingGeometry(9, 14, 28), new THREE.MeshBasicMaterial({ color: col("--good"), transparent: true, opacity: 0, side: THREE.DoubleSide })), bad = new THREE.Mesh(new THREE.RingGeometry(15, 21, 28), new THREE.MeshBasicMaterial({ color: col("--bad"), transparent: true, opacity: 0, side: THREE.DoubleSide }));
     for (const m of [ok, bad]) { m.rotation.x = -Math.PI / 2; m.position.copy(nodeV(n)); m.position.y = 1.5; g.add(m); } return { n, ok, bad }; });
@@ -612,8 +621,8 @@ function drawFleet() {
 }
 function fleetFrame() {
   const R = S.capRun; if (!R || !R.mesh) return; const t = S.anim.t, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), UP = new THREE.Vector3(0, 1, 0), hide = new THREE.Vector3(0, -9999, 0); let air = 0;
-  R.acc.forEach((i, j) => { const lg = R.res[i].legs; let p = hide; if (t >= lg[0][1] * R.slot && t <= lg[lg.length - 1][2] * R.slot) { let L0 = lg[0]; for (const l of lg) if (l[1] * R.slot <= t) L0 = l; const f = Math.min(1, (t - L0[1] * R.slot) / ((L0[2] - L0[1]) * R.slot)), a = nodeV(K.C.af[L0[0]], 4), b = nodeV(K.C.at[L0[0]], 4); p = a.clone().lerp(b, f); const d = b.clone().sub(a); Q.setFromAxisAngle(UP, Math.atan2(-d.z, d.x)); air++; } M.compose(p, Q, one); R.mesh.setMatrixAt(j, M); });
-  R.mesh.instanceMatrix.needsUpdate = true; let sub = 0, ok = 0; const okA = {}, badA = {};
+  R.acc.forEach((i, j) => { const lg = R.res[i].legs; let p = hide; if (t >= lg[0][1] * R.slot && t <= lg[lg.length - 1][2] * R.slot) { let L0 = lg[0]; for (const l of lg) if (l[1] * R.slot <= t) L0 = l; const f = Math.min(1, (t - L0[1] * R.slot) / ((L0[2] - L0[1]) * R.slot)), a = nodeV(K.C.af[L0[0]], 4), b = nodeV(K.C.at[L0[0]], 4); p = a.clone().lerp(b, f); const d = b.clone().sub(a); Q.setFromAxisAngle(UP, Math.atan2(-d.z, d.x)); air++; } M.compose(p, Q, one); R.mesh.setMatrixAt(j, M); R.frame.setMatrixAt(j, M); });
+  R.mesh.instanceMatrix.needsUpdate = true; R.frame.instanceMatrix.needsUpdate = true; let sub = 0, ok = 0; const okA = {}, badA = {};
   R.trips.forEach((tr, i) => { const td = tr.dispatch * R.slot; if (td <= t) { sub++; if (R.res[i].ok) ok++; const age = (t - td) / Math.max(30, S.anim.rate * 2); if (age < 1) { const m = R.res[i].ok ? okA : badA; m[tr.o] = Math.max(m[tr.o] || 0, 1 - age); } } });
   R.rings.forEach((r) => { r.ok.material.opacity = (okA[r.n] || 0) * 0.9; r.bad.material.opacity = (badA[r.n] || 0) * 0.9; });
   const el = $("liveCap"); if (el) el.innerHTML = `<b>${Math.floor(t / 60)} min</b> · ${sub} requested · <span style="color:var(--good)">${ok} approved</span> · <span style="color:var(--bad)">${sub - ok} denied</span> · ${air} in the air`;
