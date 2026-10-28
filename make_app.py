@@ -49,10 +49,17 @@ def main():
         weather=wx, windp=dict(WindParams().__dict__), ref=REF,
         rh=json.loads(Path("demo/rh_cases.json").read_text()))
     eng = Path("demo/lab_engine.js").read_text()
+    # three.js is inlined so the single file also runs where outside scripts are blocked (SharePoint, Outlook, offline)
+    vendor = {"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js": "demo/vendor/three.min.js",
+              "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js": "demo/vendor/OrbitControls.js"}
     html = (Path("demo/app_template.html").read_text()
             .replace("/*__ENGINE__*/", eng)
             .replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")).replace("</", "<\\/"))
             .replace('/*__ENGINE_SRC__*/""', json.dumps(eng).replace("</", "<\\/")))
+    for url, f in vendor.items():
+        tag = f'<script src="{url}"></script>'
+        assert tag in html, url
+        html = html.replace(tag, "<script>" + Path(f).read_text().replace("</script", "<\\/script") + "</script>")
     Path(a.out).write_text(html)
     print(f"{a.out}: {len(html) / 1e6:.1f} MB · {len(data['city']['buildings'])} buildings · "
           f"{len(data['city']['places'])} places · {len(data['city']['trees'])} trees · {wx['source']}")

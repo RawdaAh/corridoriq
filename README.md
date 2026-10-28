@@ -35,7 +35,7 @@ Every result has a **Download CSV** button. The map shows OpenStreetMap building
 python make_app.py                                      # Dallas; captures a 24-h wind forecast (Open-Meteo, NWS fallback)
 python make_app.py --osm data/osm/smu_campus.osm.gz --name "SMU campus"
 ```
-Open the built file from disk to get a live forecast (**Live forecast** button). Copies hosted with a strict content policy use the forecast captured at build time.
+Open the built file from disk to get a live forecast (**Live forecast** button). three.js is inlined from `demo/vendor` (MIT), so the single file also runs where outside scripts are blocked (SharePoint or Outlook previews, offline); only the live forecast needs internet. Copies hosted with a strict content policy use the forecast captured at build time.
 
 **AAM Corridor Lab — `demo/lab.html` (research tool).** One page per paper, on any OpenStreetMap area:
 
