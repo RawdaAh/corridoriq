@@ -76,7 +76,11 @@ input[type="range"] { width: 100%; accent-color: var(--brand); }
 .hour[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); }
 .hour.best { box-shadow: inset 0 -3px 0 var(--good); }
 .wx { display: grid; gap: 5px; }
-.wxrow { display: grid; grid-template-columns: 58px 22px minmax(0, 1fr) 82px; gap: 8px; align-items: center; font-size: 12.5px; }
+.wxrow { display: grid; grid-template-columns: 44px 18px minmax(0, 1fr) 76px 64px; gap: 6px; align-items: center; font: 12.5px var(--font-body); color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 3px 4px; text-align: left; cursor: pointer; width: 100%; }
+.wxrow.on { border-color: var(--brand); background: var(--brand-soft); }
+.tbadge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 1px 6px; font: 600 10.5px var(--font-body); text-align: center; white-space: nowrap; }
+.hour .tbadge { margin-top: 3px; font-size: 9.5px; padding: 0 4px; }
+.hour small { font-size: 9.5px; color: var(--ink-3); }
 .wxrow .bar { height: 7px; border-radius: 4px; background: var(--rule); overflow: hidden; }
 .wxrow .bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--w-lo), var(--w-mid), var(--w-hi)); }
 .wxrow svg { width: 18px; height: 18px; }
@@ -573,7 +577,7 @@ if (!window.THREE || !DATA) { document.body.insertAdjacentHTML("beforeend", '<di
 
 // ===================================================================== state
 const S = {
-  screen: "plan", city: DATA.city, wx: DATA.weather, hour: 0,
+  screen: "plan", city: DATA.city, wx: DATA.weather, hour: 0, wxAlt: 400, flyAlt: "auto",
   from: null, to: null, routes: [], active: -1, priority: "balanced",
   design: { mlen: 500, mwid: 160, nlat: 4, ceil: 400, nh: 4, clearance: 25 },
   veh: { cruise_mph: 35, energy_j_per_ft: 20.42, phase_dependent: true, k_climb: 0.2, alpha_desc: 1, takeoff_fraction: 0.1, battery_wh: 250 },
@@ -706,13 +710,19 @@ function profileAt(hw, zm) {   // m/s, from-deg at height zm (log interpolation 
 function layerWinds(hw, F, zl) { const bear = F.b * 180 / Math.PI; return zl.map((z) => { const [sp, df] = profileAt(hw, Math.max(z, 10)); const tm = 90 - ((df + 180) % 360); return [sp, ((tm - bear) % 360 + 360) % 360]; }); }
 const arrowSVG = (from) => `<svg viewBox="0 0 20 20" style="transform:rotate(${(from + 180) % 360}deg)"><path d="M10 2 L15 11 H11.5 V18 H8.5 V11 H5 Z" fill="currentColor"/></svg>`;
 const hourLabel = (t) => { if (!t) return "now"; const d = new Date(t); return isNaN(d) ? t.slice(11, 16) : d.toLocaleTimeString([], { hour: "numeric" }); };
+const TYPE = { tail: ["Tailwind", "--good"], cross: ["Crosswind", "--ink-3"], head: ["Headwind", "--bad"] };
+function windType(dirFrom) {   // relative to the From -> To direction: same rule as the routing model (<=45 deg tail, >=135 deg head)
+  if (!K) return null; const route = (90 - K.F.b * 180 / Math.PI + 360) % 360, toward = (dirFrom + 180) % 360, g = Math.abs(((toward - route + 540) % 360) - 180);
+  return g <= 45 ? "tail" : g >= 135 ? "head" : "cross";
+}
+const typeBadge = (t, small) => t ? `<span class="tbadge" style="color:var(${TYPE[t][1]});border-color:color-mix(in srgb, var(${TYPE[t][1]}) 45%, transparent)">${small ? TYPE[t][0].replace("wind", "") : TYPE[t][0]}</span>` : "";
 function weatherCard() {
   const hw = hourWx(S.hour), rows = [400, 300, 200, 100].map((ft) => { const [s, d] = profileAt(hw, ft / FT); return { ft, mph: s * MPH, d }; }), mx = Math.max(25, ...rows.map((r) => r.mph));
-  return `<div class="wx">${rows.map((r) => `<div class="wxrow"><span>${r.ft} ft</span><span style="color:var(--ink-2)">${arrowSVG(r.d)}</span><div class="bar"><i style="width:${Math.min(100, r.mph / mx * 100)}%"></i></div><span class="v">${fmt(r.mph, 0)} mph ${compass(r.d)}</span></div>`).join("")}</div>
-    <p class="note">${esc(S.wx.source)}${S.wx.fetched ? ` · ${esc(S.wx.fetched)}` : ""}. Arrows point where the wind blows.</p>`;
+  return `<div class="wx">${rows.map((r) => `<button type="button" class="wxrow${S.wxAlt === r.ft ? " on" : ""}" data-alt="${r.ft}" title="Show the forecast and the map wind at ${r.ft} ft"><span>${r.ft} ft</span><span style="color:var(--ink-2)">${arrowSVG(r.d)}</span><div class="bar"><i style="width:${Math.min(100, r.mph / mx * 100)}%"></i></div><span class="v">${fmt(r.mph, 0)} mph ${compass(r.d)}</span>${typeBadge(windType(r.d))}</button>`).join("")}</div>
+    <p class="note">Wind type is for flying ${S.from && S.to ? `${esc(S.from.n)} → ${esc(S.to.n)}` : "From → To"}. ${esc(S.wx.source)}${S.wx.fetched ? ` · ${esc(S.wx.fetched)}` : ""}. Arrows point where the wind blows; tap an altitude to see it hour by hour.</p>`;
 }
 function hoursStrip() {
-  return `<div class="hours" id="hours">${S.wx.hours.slice(0, 12).map((hw, i) => { const [s, d] = profileAt(hw, 400 / FT); return `<button type="button" class="hour${S.bestHour === i ? " best" : ""}" data-h="${i}" aria-pressed="${S.hour === i}">${i === 0 ? "Now" : hourLabel(hw.time)}<span style="color:var(--ink-2)">${arrowSVG(d)}</span><b>${fmt(s * MPH, 0)}</b>mph</button>`; }).join("")}</div>`;
+  return `<div class="hours" id="hours">${S.wx.hours.slice(0, 12).map((hw, i) => { const [s, d] = profileAt(hw, S.wxAlt / FT); return `<button type="button" class="hour${S.bestHour === i ? " best" : ""}" data-h="${i}" aria-pressed="${S.hour === i}">${i === 0 ? `Now<br><small>${hourLabel(hw.time)}</small>` : hourLabel(hw.time) + "<br><small>&nbsp;</small>"}<span style="color:var(--ink-2)">${arrowSVG(d)}</span><b>${fmt(s * MPH, 0)}</b>mph${typeBadge(windType(d), true)}</button>`; }).join("")}</div>`;
 }
 async function liveWeather() {   // Open-Meteo (wind at 10/80/120/180 m), then U.S. NWS hourly (surface wind + power law)
   const [lat, lon] = S.city.origin, H = [10, 80, 120, 180], stamp = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -749,8 +759,11 @@ function planRoute(k, hourIdx, prio) {
   const { C, F, o, d } = k; if (o < 0 || d < 0) return { error: k.pads ? "Buildings block every path between these places at this corridor size. Try more lanes or a higher ceiling in Settings." : "No open landing spot near one end. Try another place." };
   const hw = hourWx(hourIdx), W = urbanWind(C, F, hw), wind = G.windFromUrban(C, W), none = G.windNone(C);
   const ct = G.linkCosts(C, wind, S.veh), cn = G.linkCosts(C, none, S.veh);
-  const R = G.pareto(C, ct, wind, S.veh, o, d).routes; if (!R.length) return { error: "Buildings block every path between these places. Try a wider corridor in Settings." };
-  const calm = G.pareto(C, cn, none, S.veh, o, d).routes, tMin = Math.min(...R.map((r) => r.time)), eMin = Math.min(...R.map((r) => r.energy));
+  // fixed flight altitude: horizontal legs only at that layer, climbs/descents only below it
+  let mask = null; if (S.flyAlt !== "auto") { const zf = S.flyAlt / FT; mask = new Uint8Array(C.A); for (let a = 0; a < C.A; a++) { const z0 = C.pos[C.af[a]][2], z1 = C.pos[C.at[a]][2];
+    mask[a] = Math.max(z0, z1) <= zf + 0.5 && !(z0 > 0 && z1 > 0 && Math.abs(z0 - z1) < 0.01 && Math.abs(z0 - zf) > 0.5) ? 1 : 0; } }
+  const R = G.pareto(C, ct, wind, S.veh, o, d, { mask }).routes; if (!R.length) return { error: mask ? `No path at ${S.flyAlt} ft: buildings or the ceiling block it. Try another altitude or Best altitude.` : "Buildings block every path between these places. Try a wider corridor in Settings." };
+  const calm = G.pareto(C, cn, none, S.veh, o, d, { mask }).routes, tMin = Math.min(...R.map((r) => r.time)), eMin = Math.min(...R.map((r) => r.energy));
   const score = (r) => prio === "fastest" ? [r.time, r.energy] : prio === "efficient" ? [r.energy, r.time] : [r.time / tMin + r.energy / eMin, r.time];
   const rec = R.slice().sort((a, b) => score(a)[0] - score(b)[0] || score(a)[1] - score(b)[1])[0];
   // what happens if the operator ignores the wind: plan in calm air, fly in the real wind
@@ -770,7 +783,10 @@ function describe(k, plan, r) {
     const g = ws < 0.5 ? 90 : Math.acos(Math.max(-1, Math.min(1, (u * hx + v * hy) / (hh * ws)))) * 180 / Math.PI;
     mix[g <= 45 ? "tail" : g >= 135 ? "head" : "cross"] += dt; }
   for (const k of Object.keys(mix)) mix[k] = all ? 100 * mix[k] / all : 0;
-  return { miles: dist * FT / 5280, min: r.time / 60, wh: r.energy / 3600, batt: 100 * r.energy / 3600 / S.veh.battery_wh, cruise: +cruise, along: tt ? tw / tt : 0, maxAlt: Math.max(...alts), mix };
+  const levels = []; for (let i = 0; i < r.arcs.length; i++) { const z0 = alts[i], z1 = alts[i + 1], p = C.pos[r.nodes[i]], q = C.pos[r.nodes[i + 1]];
+    if (z0 > 0 && Math.abs(z0 - z1) < 1 && Math.hypot(q[0] - p[0], q[1] - p[1]) > 1) { const L = Math.round(z0 / 10) * 10; if (!levels.length || levels[levels.length - 1] !== L) levels.push(L); } }
+  const story = levels.length ? "climbs to " + levels.map((l, i) => i ? (l > levels[i - 1] ? `climbs to ${l} ft` : `drops to ${l} ft`) : `${l} ft`).join(", then ") + ", lands" : "direct climb and descent";
+  return { miles: dist * FT / 5280, min: r.time / 60, wh: r.energy / 3600, batt: 100 * r.energy / 3600 / S.veh.battery_wh, cruise: +cruise, along: tt ? tw / tt : 0, maxAlt: Math.max(...alts), mix, levels, story: story.replace("climbs to climbs", "climbs") };
 }
 
 // ===================================================================== drawing: corridor, routes, drones, particles
@@ -941,10 +957,11 @@ function leftPlan() {
     ${r.length ? `<div class="chips">${r.map((x, i) => `<span class="chip${i === S.active ? " on" : ""}"><span data-open="${i}" style="cursor:pointer">${esc(x.from.n)} → ${esc(x.to.n)}</span><button type="button" data-del="${i}" aria-label="Remove route">✕</button></span>`).join("")}</div>
       <button class="btn" type="button" id="compare">Compare all ${r.length} routes</button>` : `<p class="note">Save several routes to compare them side by side.</p>`}
   </div>
-  <div class="blk"><h2><span><span class="step">2</span>When</span><small>wind at 400 ft</small></h2>${hoursStrip()}
+  <div class="blk"><h2><span><span class="step">2</span>When</span><small>wind at ${S.wxAlt} ft · pick an hour</small></h2>${hoursStrip()}
     ${weatherCard()}<div class="inrow"><button class="btn" type="button" id="live">↻ Live forecast</button><button class="btn" type="button" id="best">Best time to leave</button></div></div>
   <div class="blk"><h2><span><span class="step">3</span>Priority</span></h2>
     <div class="seg"><button type="button" data-p="fastest" aria-pressed="${S.priority === "fastest"}">Fastest</button><button type="button" data-p="balanced" aria-pressed="${S.priority === "balanced"}">Balanced</button><button type="button" data-p="efficient" aria-pressed="${S.priority === "efficient"}">Lowest energy</button></div>
+    <label class="field"><span>Flight altitude</span><select id="flyAlt"><option value="auto"${S.flyAlt === "auto" ? " selected" : ""}>Best altitude (recommended)</option>${[100, 200, 300, 400].map((f) => `<option value="${f}"${S.flyAlt === f ? " selected" : ""}>Fly at ${f} ft</option>`).join("")}</select></label>
     <p class="note">${{ fastest: "Minimize flight time; energy is the tie-breaker.", balanced: "Best trade-off: equal weight on time and energy.", efficient: "Minimize energy (battery use); time is the tie-breaker." }[S.priority]} Every trade-off route is listed under Other options.</p>
     <button class="btn go" type="button" id="planBtn">Plan flight</button>
     ${settingsBlock()}</div>`;
@@ -968,6 +985,8 @@ function wirePlan() {
   $("best").onclick = bestTime;
   document.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => { S.priority = b.dataset.p; renderLeft(); runPlan(); });
   $("planBtn").onclick = runPlan;
+  document.querySelectorAll(".wxrow[data-alt]").forEach((b) => b.onclick = () => { S.wxAlt = +b.dataset.alt; if (K) { const i = windLayers().findIndex((z) => Math.abs(z * FT - S.wxAlt) < 1); if (i >= 0) { S.windView = i; windSelect(); } } renderLeft(); });
+  $("flyAlt").onchange = (e) => { S.flyAlt = e.target.value === "auto" ? "auto" : +e.target.value; runPlan(); };
   wireSettings(() => { refreshCorridor(); });
 }
 function wireSettings(after) {
@@ -980,6 +999,7 @@ function refreshCorridor() {
   if (!S.from || !S.to) return; if (S.from === S.to) { toast("From and To are the same place."); return; }
   K = buildCorridor(S.from, S.to, S.design, S.screen === "plan"); drawCorridor(); frameView();
   if (K.widened && S.screen === "plan") toast(`Tall buildings block a ${S.design.nlat + 1}-lane corridor here, so it was widened to ${K.widened} lanes.`);
+  if (S.screen === "plan") { const sc = $("left").scrollTop; renderLeft(); $("left").scrollTop = sc; }
   $("pinAt").innerHTML = `${esc(S.from.n)}<small>From</small>`; $("pinBt").innerHTML = `${esc(S.to.n)}<small>To</small>`;
   if (S.screen === "plan") runPlan(); else if (S.screen === "cap") runCapacity();
 }
@@ -995,7 +1015,7 @@ function rightPlan() {
   const opts = (() => { const R = pl.R, fast = R.reduce((p, q) => q.time < p.time ? q : p), eco = R.reduce((p, q) => q.energy < p.energy ? q : p); const l = [["Fastest", fast], ["Balanced", pl.rec], ["Lowest energy", eco]], seen = new Set(); return l.filter(([, r]) => !seen.has(r) && seen.add(r)).map(([k, r], _, arr) => arr.length === 1 ? ["Best on both", r] : [k, r]); })();
   $("right").innerHTML = `<div class="blk"><h2>Recommended flight <small>${hourLabel(hw.time) === "now" || S.hour === 0 ? "departing now" : "departing " + hourLabel(hw.time)}</small></h2>
     <div class="answer">
-      <div class="metric hero"><div class="k">Flight time</div><div class="v">${fmt(a.min, 1)} <small>min</small></div><div class="d">${fmt(a.miles, 2)} mi · cruising at ${a.cruise} ft</div></div>
+      <div class="metric hero"><div class="k">Flight time</div><div class="v">${fmt(a.min, 1)} <small>min</small></div><div class="d">${fmt(a.miles, 2)} mi · ${a.story}${S.flyAlt !== "auto" ? ` (held at ${S.flyAlt} ft)` : ""}</div></div>
       <div class="metric"><div class="k">Energy</div><div class="v">${fmt(a.wh, 1)} <small>Wh</small></div><div class="d">${fmt(a.batt, 0)}% of a ${S.veh.battery_wh} Wh battery</div></div>
       <div class="metric"><div class="k">Wind effect</div><div class="v ${windEff > 0 ? "up" : "down"}">${windEff > 0 ? "+" : ""}${fmt(windEff, 0)}<small>% energy</small></div><div class="d">vs the same trip in calm air</div></div>
     </div>
