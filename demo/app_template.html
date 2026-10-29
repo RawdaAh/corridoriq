@@ -11,7 +11,7 @@
   --brand: #1747c9; --brand-soft: #1747c914; --corridor: #b5267f;
   --aware: #1a7bdc; --naive: #e8811a; --good: #1e8a4c; --bad: #d13b3b; --warn: #b7791f;
   --op1: #1a7bdc; --op2: #e8681a; --op3: #1baf7a; --op4: #c98500; --op5: #d55181; --op6: #6250d6; --op7: #2c9a2c; --op8: #e34948; --op9: #3f8fa8; --op10: #8a6d3b;
-  --w-lo: #2fa6b8; --w-mid: #2f62d6; --w-hi: #8a2bc2;
+  --w-lo: #9fd6a0; --w-mid: #2c9ea1; --w-hi: #2f3fb0;
   --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -19,11 +19,11 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --sky: #0d1622; --fog: #101a26; --ground: #1a2028; --panel: #141c26ee; --card: #18212c; --ink: #e8eef4; --ink-2: #a9b6c2; --ink-3: #74818d; --rule: #26313d;
   --brand: #6f97ff; --brand-soft: #6f97ff1f; --corridor: #e05aa9; --aware: #49a0f5; --naive: #f0a040; --good: #44b874; --bad: #ef6a6a; --warn: #d9a441;
-  --w-lo: #4fc3d4; --w-mid: #6f97ff; --w-hi: #d48cff; color-scheme: dark; } }
+  --w-lo: #4f7d45; --w-mid: #2f8f8a; --w-hi: #8d9cf5; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --sky: #0d1622; --fog: #101a26; --ground: #1a2028; --panel: #141c26ee; --card: #18212c; --ink: #e8eef4; --ink-2: #a9b6c2; --ink-3: #74818d; --rule: #26313d;
   --brand: #6f97ff; --brand-soft: #6f97ff1f; --corridor: #e05aa9; --aware: #49a0f5; --naive: #f0a040; --good: #44b874; --bad: #ef6a6a; --warn: #d9a441;
-  --w-lo: #4fc3d4; --w-mid: #6f97ff; --w-hi: #d48cff; color-scheme: dark; }
+  --w-lo: #4f7d45; --w-mid: #2f8f8a; --w-hi: #8d9cf5; color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--sky); color: var(--ink); font: 13.5px/1.4 var(--font-body); overflow: hidden; }
@@ -155,7 +155,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .hour:focus-vis
 <aside class="side" id="left" aria-label="Task"></aside>
 <aside class="side" id="right" aria-label="Results"></aside>
 <div class="mapbar"><select id="m-view" aria-label="What to show" style="width:auto;padding:7px 8px"><option value="layers">View: corridor layers</option><option value="network">View: full network design</option><option value="route">View: chosen route only</option></select><select id="m-wind" aria-label="Wind layer shown" style="width:auto;padding:7px 8px"></select><button class="btn" type="button" id="m-wtype" aria-pressed="false">Wind type on route</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
-  <span class="lg"><span id="lg-plan"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span> <span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span></span><span id="lg-wtype" style="display:none"><span class="sw" style="background:#2e9d5b"></span>tailwind <span class="sw" style="background:#8a929c;margin-left:6px"></span>crosswind <span class="sw" style="background:#d64545;margin-left:6px"></span>headwind <span class="sw" style="background:var(--brand);margin-left:6px"></span>climb/descent</span><span id="netlegend" style="display:none"></span><span id="lg-wind">wind arrows &amp; streaks <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
+  <span class="lg"><span id="lg-plan"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span> <span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span></span><span id="lg-wtype" style="display:none"><span class="sw" style="background:#2e9d5b"></span>tailwind <span class="sw" style="background:#8a929c;margin-left:6px"></span>crosswind <span class="sw" style="background:#d64545;margin-left:6px"></span>headwind <span class="sw" style="background:var(--brand);margin-left:6px"></span>climb/descent</span><span id="netlegend" style="display:none"></span><span id="lg-wind">wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
 <div class="toast" id="toast"></div>
 
 <script>/*__ENGINE__*/</script>
@@ -406,23 +406,6 @@ function windSelect() {
   el.value = cur === "all" || cur === "off" || +cur < Ls.length ? String(cur) : "all";
 }
 const NET_TYPES = [["along", "Along the corridor", "#1a7bdc"], ["lateral", "Lane change", "#1baf7a"], ["vertical", "Climb / descent", "#6250d6"], ["face", "Diagonal", "#e8811a"], ["body", "3D diagonal", "#e87ba4"]];
-// wind arrows: a grid of arrows at each corridor layer, length and colour by speed (static, so always visible)
-function drawWindArrows() {
-  const g = group("warrows"); if (!K || !S.plan || !S.plan.W) return; const C = K.C, W = S.plan.W, Ls = windLayers(), view = S.windView ?? "all";
-  if (view === "off") return; const zs = view === "all" ? Ls : [Ls[Math.min(+view, Ls.length - 1)]];
-  const sp = view === "all" ? Math.max(90, Math.min(170, C.L / 15)) : Math.max(40, Math.min(90, C.L / 30)), vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15, ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], o = [0, 0], pts = [];
-  for (const z of zs) for (let x = -sp; x <= C.L + sp; x += sp) for (let y = -C.half - 2 * sp; y <= C.half + 2 * sp; y += sp) {
-    const jx = x + ((z * 7) % sp) * 0.5; if (solidAt(jx, y, z)) continue; G.sample(W, jx, y, Math.max(z, 10), o); const m = Math.hypot(o[0], o[1]); if (m < 0.05) continue; pts.push([jx, y, z, o[0], o[1], m]); }
-  if (!pts.length) return;
-  const shaft = new THREE.CylinderGeometry(0.06, 0.06, 0.62, 6); shaft.rotateZ(-Math.PI / 2); shaft.translate(0.31, 0, 0);
-  const head = new THREE.ConeGeometry(0.2, 0.38, 10); head.rotateZ(-Math.PI / 2); head.translate(0.81, 0, 0);
-  const geo = mergeAll([shaft, head]), mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.82 }), pts.length);
-  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0), c = Math.cos(K.F.b), sn = Math.sin(K.F.b);
-  pts.forEach(([x, y, z, u, v, m], i) => { const e = G.toEN(K.F, x, y), E = u * c - v * sn, N = u * sn + v * c, d = new THREE.Vector3(E, 0, -N).normalize(), f = Math.min(1, m / vmax), L = Math.min(sp, 70) * (0.35 + 0.6 * f);
-    Q.setFromUnitVectors(X, d); M.compose(V(e[0], e[1], z), Q, new THREE.Vector3(L, L, L)); mesh.setMatrixAt(i, M);
-    mesh.setColorAt(i, f < 0.5 ? ramp[0].clone().lerp(ramp[1], f * 2) : ramp[1].clone().lerp(ramp[2], (f - 0.5) * 2)); });
-  mesh.instanceColor.needsUpdate = true; g.add(mesh); g.visible = S.screen === "plan" || S.screen === "cap";
-}
 function applyView() {
   const v = S.view || "layers";
   if (groups.layers) groups.layers.visible = v === "layers"; if (groups.net) groups.net.visible = v === "network";
@@ -513,7 +496,7 @@ function flyFrame(dt) {
 const PART = { n: 2000, T: 10 };
 function initParticles() { const g = group("particles"); PART.pos = new Float32Array(PART.n * PART.T * 2); PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
   PART.seg = new Float32Array(PART.n * (PART.T - 1) * 6); PART.col = new Float32Array(PART.n * (PART.T - 1) * 6); PART.geo = new THREE.BufferGeometry();
-  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 })); g.add(PART.mesh); }
+  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })); g.add(PART.mesh); }
 const solidAt = (x, y, z) => { const gr = K.C.grid; const i = Math.floor((x - gr.x0) / gr.res), j = Math.floor((y - gr.y0) / gr.res); if (i < 0 || j < 0 || i >= gr.nx || j >= gr.ny) return true; return gr.H[i * gr.ny + j] >= z; };
 function spawn(i, z) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solidAt(x, y, z) && k < 20); for (let t = 0; t < PART.T; t++) { PART.pos[(i * PART.T + t) * 2] = x; PART.pos[(i * PART.T + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = 0; }
 const tmp = [0, 0];
@@ -604,7 +587,7 @@ function wirePlan() {
   $("best").onclick = bestTime;
   document.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => { S.priority = b.dataset.p; renderLeft(); runPlan(); });
   $("planBtn").onclick = runPlan;
-  document.querySelectorAll(".wxrow[data-alt]").forEach((b) => b.onclick = () => { S.wxAlt = +b.dataset.alt; if (K) { const i = windLayers().findIndex((z) => Math.abs(z * FT - S.wxAlt) < 1); if (i >= 0) { S.windView = i; windSelect(); drawWindArrows(); } } renderLeft(); });
+  document.querySelectorAll(".wxrow[data-alt]").forEach((b) => b.onclick = () => { S.wxAlt = +b.dataset.alt; if (K) { const i = windLayers().findIndex((z) => Math.abs(z * FT - S.wxAlt) < 1); if (i >= 0) { S.windView = i; windSelect(); } } renderLeft(); });
   $("flyAlt").onchange = (e) => { S.flyAlt = e.target.value === "auto" ? "auto" : +e.target.value; runPlan(); };
   wireSettings(() => { refreshCorridor(); });
 }
@@ -624,8 +607,8 @@ function refreshCorridor() {
 }
 function runPlan() {
   if (!K) return; $("right").innerHTML = `<div class="blk"><h2>Planning…</h2><div class="prog"><i style="width:60%"></i></div></div>`;
-  setTimeout(() => { const t0 = performance.now(); S.plan = planRoute(K, S.hour, S.priority); S.plan.ms = performance.now() - t0; if (S.plan.error) { $("right").innerHTML = `<div class="blk"><div class="verdict bad">${S.plan.error}</div></div>`; group("routes"); group("warrows"); return; }
-    const cr = describe(K, S.plan, S.plan.rec); S.windAlt = cr.cruise; drawPlan(); drawWindArrows(); rightPlan(); }, 30);
+  setTimeout(() => { const t0 = performance.now(); S.plan = planRoute(K, S.hour, S.priority); S.plan.ms = performance.now() - t0; if (S.plan.error) { $("right").innerHTML = `<div class="blk"><div class="verdict bad">${S.plan.error}</div></div>`; group("routes"); return; }
+    const cr = describe(K, S.plan, S.plan.rec); S.windAlt = cr.cruise; drawPlan(); rightPlan(); }, 30);
 }
 function rightPlan() {
   const pl = S.plan, a = describe(K, pl, pl.rec), n = describe(K, pl, pl.naive), cm = describe(K, { wind: G.windNone(K.C) }, pl.calm);
@@ -752,7 +735,7 @@ function runCapacity() {
   const H = Math.ceil((3600 + 2 * 1.2 * C.L * FT / (S.veh.cruise_mph * 5280 / 3600) + 300) / c.slot), t0 = performance.now(), res = G.sire(C, linkTimes(K), trips, { slot: c.slot, H, rule: c.separate && c.twoWay ? "directed" : "undirected", groundTransit: false });
   const k = G.kpis(trips, res); S.capRun = { trips, res, k, ms: performance.now() - t0, slot: c.slot };
   if (!S.plan || !S.plan.W) { S.plan = planRoute(K, S.hour, S.priority); if (!S.plan.error) S.windAlt = 300; }
-  drawFleet(); drawWindArrows(); rightCap();
+  drawFleet(); rightCap();
 }
 function drawFleet() {
   const g = group("routes"), R = S.capRun, acc = R.res.map((r, i) => r.ok ? i : -1).filter((i) => i >= 0), s = Math.max(2.5, Math.min(5, K.C.L / 550));
@@ -898,7 +881,7 @@ function validate(kind) {
 // ===================================================================== screens, picking, area import, loop
 function renderLeft() { const s = S.screen; $("left").innerHTML = s === "plan" ? leftPlan() : s === "cap" ? leftCap() : s === "disp" ? leftDisp() : leftVal(); if (s === "plan") wirePlan(); else if (s === "cap") wireCap(); else if (s === "disp") wireDisp(); else wireVal(); }
 function go(s) {
-  S.screen = s; if (groups.warrows) groups.warrows.visible = s === "plan" || s === "cap"; document.querySelectorAll("#screens button").forEach((b) => b.setAttribute("aria-selected", b.dataset.s === s)); renderLeft(); group("routes"); $("right").innerHTML = "";
+  S.screen = s; document.querySelectorAll("#screens button").forEach((b) => b.setAttribute("aria-selected", b.dataset.s === s)); renderLeft(); group("routes"); $("right").innerHTML = "";
   if (s === "plan") { if (K) { drawCorridor(); frameView(); runPlan(); } }
   else if (s === "cap") { if (S.cap.size !== "custom") { const z = SIZES[S.cap.size]; S.design.nlat = z.lanes - 1; S.design.nh = z.layers; } refreshCapCorridor(); if (K) { frameView(); runCapacity(); } }
   else if (s === "disp") loadDisp();
@@ -920,7 +903,7 @@ $("osmfile").onchange = async (e) => { const f = e.target.files[0]; if (!f) retu
     go("plan"); toast(`${c.buildings.length} buildings loaded. Search a place or click the map for From and To.`);
   } catch (err) { toast(`Could not read that file: ${err.message}`); } };
 function updateArea() { $("areaname").textContent = S.city.name; $("areainfo").textContent = `${S.city.buildings.length.toLocaleString()} buildings · ${P.length} places`; }
-$("m-wind").onchange = (e) => { S.windView = e.target.value === "all" || e.target.value === "off" ? e.target.value : +e.target.value; drawWindArrows(); applyView(); };
+$("m-wind").onchange = (e) => { S.windView = e.target.value === "all" || e.target.value === "off" ? e.target.value : +e.target.value; applyView(); };
 $("m-view").onchange = (e) => { S.view = e.target.value; applyView(); };
 $("m-wtype").onclick = () => { S.windColor = !S.windColor; $("m-wtype").setAttribute("aria-pressed", S.windColor); if (S.screen === "plan" && S.plan && !S.plan.error) { const t = S.anim.t, pl = S.anim.playing; drawPlan(); S.anim.t = t; S.anim.playing = pl; } applyView(); };
 $("m-follow").onclick = () => { S.follow = !S.follow; $("m-follow").setAttribute("aria-pressed", S.follow); if (!S.follow && K) frameView(); };
