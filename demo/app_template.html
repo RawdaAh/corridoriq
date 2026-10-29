@@ -493,10 +493,10 @@ function flyFrame(dt) {
     if (!REDUCED) d.rotors.forEach((ro, k) => ro.rotation.y += (k % 2 ? 1 : -1) * dt * 45); d.light.visible = Math.floor(performance.now() / 500) % 2 === 0; }
   if (S.follow && S.drones && S.drones[0]) { const p = S.drones[0].d.position; controls.target.lerp(p, 0.12); camera.position.lerp(p.clone().add(new THREE.Vector3(-160, 140, 170)), 0.06); }
 }
-const PART = { n: 2000, T: 10 };
+const PART = { n: 4800, T: 10 };   // as dense as the original single-layer streaks: ~1,200 per layer, 2,400 for one layer
 function initParticles() { const g = group("particles"); PART.pos = new Float32Array(PART.n * PART.T * 2); PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
   PART.seg = new Float32Array(PART.n * (PART.T - 1) * 6); PART.col = new Float32Array(PART.n * (PART.T - 1) * 6); PART.geo = new THREE.BufferGeometry();
-  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 })); g.add(PART.mesh); }
+  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })); g.add(PART.mesh); }
 const solidAt = (x, y, z) => { const gr = K.C.grid; const i = Math.floor((x - gr.x0) / gr.res), j = Math.floor((y - gr.y0) / gr.res); if (i < 0 || j < 0 || i >= gr.nx || j >= gr.ny) return true; return gr.H[i * gr.ny + j] >= z; };
 function spawn(i, z) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solidAt(x, y, z) && k < 20); for (let t = 0; t < PART.T; t++) { PART.pos[(i * PART.T + t) * 2] = x; PART.pos[(i * PART.T + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = 0; }
 const tmp = [0, 0];
@@ -504,9 +504,10 @@ function windLayers() { return K ? K.C.z_levels.filter((z) => z > 0) : []; }   /
 function particles(dt) {
   const on = S.plan && S.plan.W && K && S.screen !== "disp" && S.screen !== "val" && S.windView !== "off"; PART.mesh.visible = !!on; if (!on) return;
   const Ls = windLayers(), view = S.windView ?? "all", key = Ls.join(",") + "|" + view;
-  if (PART.key !== key) { PART.zs = new Float32Array(PART.n); for (let i = 0; i < PART.n; i++) { PART.zs[i] = view === "all" ? Ls[i % Ls.length] : Ls[Math.min(+view, Ls.length - 1)]; PART.life[i] = 0; } PART.key = key; }
+  const NA = view === "all" ? Math.min(PART.n, 1200 * Ls.length) : 2400;
+  if (PART.key !== key) { PART.zs = new Float32Array(PART.n); for (let i = 0; i < PART.n; i++) { PART.zs[i] = view === "all" ? Ls[i % Ls.length] : Ls[Math.min(+view, Ls.length - 1)]; PART.life[i] = 0; } PART.key = key; PART.geo.setDrawRange(0, NA * (PART.T - 1) * 2); }
   const bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
-  for (let i = 0; i < PART.n; i++) { const z = PART.zs[i]; PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i]) spawn(i, z); const b = i * PART.T * 2;
+  for (let i = 0; i < NA; i++) { const z = PART.zs[i]; PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i]) spawn(i, z); const b = i * PART.T * 2;
     for (let k = PART.T - 1; k > 0; k--) { PART.pos[b + 2 * k] = PART.pos[b + 2 * k - 2]; PART.pos[b + 2 * k + 1] = PART.pos[b + 2 * k - 1]; }
     G.sample(S.plan.W, PART.pos[b], PART.pos[b + 1], Math.max(z, 10), tmp); PART.pos[b] += tmp[0] * dt * 24; PART.pos[b + 1] += tmp[1] * dt * 24; if (solidAt(PART.pos[b], PART.pos[b + 1], z)) spawn(i, z);
     const f = Math.min(1, Math.hypot(tmp[0], tmp[1]) / vmax), c = f < 0.5 ? ramp[0].clone().lerp(ramp[1], f * 2) : ramp[1].clone().lerp(ramp[2], (f - 0.5) * 2);
