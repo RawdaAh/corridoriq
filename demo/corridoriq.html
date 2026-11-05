@@ -1704,7 +1704,7 @@ function drawCity() {
   const roofs = new THREE.Mesh(rgm, new THREE.MeshLambertMaterial({ vertexColors: true })); roofs.castShadow = true; roofs.receiveShadow = true; g.add(roofs);
   // trees
   const T = S.city.trees; if (T.length) {
-    const can = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.2, 1), new THREE.MeshLambertMaterial({ color: night ? "#2f5a35" : "#6e9f55", flatShading: true }), T.length);
+    const can = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.2, 1), new THREE.MeshLambertMaterial({ color: night ? "#2f5a35" : "#6e9f55" }), T.length);
     const tr = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.45, 4, 6), new THREE.MeshLambertMaterial({ color: night ? "#3d3328" : "#7a6248" }), T.length);
     const M = new THREE.Matrix4(), Q = new THREE.Quaternion(); T.forEach(([x, y], i) => { const s = 0.8 + ((x * 7.31 + y * 3.17) % 1 + 1) % 1 * 0.6; M.compose(V(x, y, 2 + 4 * s), Q, new THREE.Vector3(s, s * 1.1, s)); can.setMatrixAt(i, M); M.compose(V(x, y, 2), Q, new THREE.Vector3(1, 1, 1)); tr.setMatrixAt(i, M); });
     can.castShadow = true; g.add(can); g.add(tr); }
