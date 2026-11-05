@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use CorridorIQ or this code, please cite it as below and cite the related papers."
+title: "CorridorIQ: Wind-aware planning for urban drone corridors"
+type: software
+authors:
+  - family-names: Ahmed
+    given-names: Rawda
+    affiliation: Southern Methodist University
+  - family-names: Abdelghany
+    given-names: Khaled
+    affiliation: Southern Methodist University
+year: 2026
+license: MIT
+url: "https://USERNAME.github.io/corridoriq/"
+repository-code: "https://github.com/USERNAME/corridoriq"
+keywords: [advanced air mobility, UAV routing, urban wind, airspace corridors, reservation, rolling horizon]
+references:
+  - type: article
+    title: "Highways in the Sky: UAV Routing under Dynamic Wind Profiles in Low-Altitude Urban Airspace"
+    authors:
+      - {family-names: Ahmed, given-names: Rawda}
+      - {family-names: Abdelghany, given-names: Khaled}
+    notes: "Transportation Research Record (under review)"
+  - type: conference-paper
+    title: "Shared Advanced Air Mobility Corridors: Configuration, Capacity, and Demand Management under a Reservation Protocol"
+    authors:
+      - {family-names: Ahmed, given-names: Rawda}
+      - {family-names: Abdelghany, given-names: Khaled}
+    notes: "TRB Annual Meeting, paper TRBAM-27-05211"
+  - type: article
+    title: "GeoWind2Plan: Mission-Time 3D Urban Wind Prediction for Energy-Efficient UAV Planning"
+    authors:
+      - {family-names: Qin, given-names: Shaoxiang}
+      - {family-names: Zhao, given-names: Yucheng}
+      - {family-names: Lyu, given-names: Fuyuan}
+      - {family-names: Zhou, given-names: Di}
+      - {family-names: Yao, given-names: Jiachen}
+      - {family-names: Liu, given-names: Xue}
+      - {family-names: Anandkumar, given-names: Anima}
+      - {family-names: Wang, given-names: Liangzhu Leon}
+      - {family-names: Xiao, given-names: Xiongye}
+    year: 2026
+    url: "https://github.com/DUAL-Xiao/GeoWind2Plan"
+    notes: "Inspiration for the city-scale 3D presentation; no code reused. Project site: http://geowind2plan.com/"

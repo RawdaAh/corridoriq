@@ -126,6 +126,11 @@ details .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))
 .mapbar .lg { font-size: 11.5px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; padding: 0 6px; flex-wrap: wrap; }
 .mapbar a { color: var(--ink-3); font-size: 11px; }
 .ramp { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--w-lo), var(--w-mid), var(--w-hi)); vertical-align: 1px; }
+dialog#about { max-width: 560px; width: calc(100vw - 32px); border: 1px solid var(--rule); border-radius: 16px; padding: 22px 24px; background: var(--card); color: var(--ink); font-size: 13.5px; line-height: 1.5; }
+dialog#about::backdrop { background: #0006; }
+dialog#about h2 { margin: 0 0 4px; font: 800 20px var(--font-display); } dialog#about h3 { margin: 14px 0 4px; font: 700 14px var(--font-display); }
+dialog#about p { margin: 0 0 8px; color: var(--ink-2); } dialog#about a { color: var(--brand); } dialog#about .cite { color: var(--ink); background: var(--brand-soft); padding: 8px 10px; border-radius: 8px; }
+dialog#about .copy { font-size: 12px; color: var(--ink-3); margin-top: 12px; }
 .toast { position: fixed; z-index: 8; top: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--card); padding: 9px 14px; border-radius: 10px; font-size: 12.5px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 80vw; }
 .toast.on { opacity: 1; }
 .picking { cursor: crosshair !important; }
@@ -149,14 +154,26 @@ button:focus-visible, select:focus-visible, input:focus-visible, .hour:focus-vis
     <button role="tab" type="button" data-s="val" aria-selected="false">Validation</button>
   </nav>
   <div class="areabox"><div><b id="areaname"></b><br><small id="areainfo"></small></div>
-    <label class="btn" for="osmfile">Change area<input type="file" id="osmfile" accept=".osm,.xml" hidden></label></div>
+    <button class="btn" type="button" id="aboutBtn">About &amp; cite</button><label class="btn" for="osmfile">Change area<input type="file" id="osmfile" accept=".osm,.xml" hidden></label></div>
 </header>
 
 <aside class="side" id="left" aria-label="Task"></aside>
 <aside class="side" id="right" aria-label="Results"></aside>
 <div class="mapbar"><select id="m-view" aria-label="What to show" style="width:auto;padding:7px 8px"><option value="layers">View: corridor layers</option><option value="network">View: full network design</option><option value="route">View: chosen route only</option></select><select id="m-wind" aria-label="Wind layer shown" style="width:auto;padding:7px 8px"></select><button class="btn" type="button" id="m-wtype" aria-pressed="false">Wind type on route</button><button class="btn" type="button" id="m-follow" aria-pressed="false">Follow drone</button><button class="btn" type="button" id="m-home">Reset view</button>
-  <span class="lg"><span id="lg-plan"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span> <span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span></span><span id="lg-wtype" style="display:none"><span class="sw" style="background:#2e9d5b"></span>tailwind <span class="sw" style="background:#8a929c;margin-left:6px"></span>crosswind <span class="sw" style="background:#d64545;margin-left:6px"></span>headwind <span class="sw" style="background:var(--brand);margin-left:6px"></span>climb/descent</span><span id="netlegend" style="display:none"></span><span id="lg-wind">wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span></div>
+  <span class="lg"><span id="lg-plan"><span><span class="sw" style="background:var(--aware)"></span>wind-aware</span> <span><span class="sw" style="background:var(--naive)"></span>ignoring wind</span></span><span id="lg-wtype" style="display:none"><span class="sw" style="background:#2e9d5b"></span>tailwind <span class="sw" style="background:#8a929c;margin-left:6px"></span>crosswind <span class="sw" style="background:#d64545;margin-left:6px"></span>headwind <span class="sw" style="background:var(--brand);margin-left:6px"></span>climb/descent</span><span id="netlegend" style="display:none"></span><span id="lg-wind">wind <span class="ramp"></span> <span id="wmax"></span></span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a><span>© 2026 Rawda Ahmed</span></span></div>
 <div class="toast" id="toast"></div>
+<dialog id="about"><form method="dialog">
+  <h2>CorridorIQ</h2>
+  <p>Wind-aware planning for urban drone corridors: routes, capacity and dispatch on real city maps and live weather.</p>
+  <h3>How to cite</h3>
+  <p class="cite">Ahmed, R. and Abdelghany, K. (2026). <i>CorridorIQ: Wind-aware planning for urban drone corridors</i>. Southern Methodist University.</p>
+  <p>Related papers: Ahmed and Abdelghany, <i>Highways in the Sky: UAV Routing under Dynamic Wind Profiles in Low-Altitude Urban Airspace</i> (Transportation Research Record, under review); Ahmed and Abdelghany, <i>Shared Advanced Air Mobility Corridors: Configuration, Capacity, and Demand Management under a Reservation Protocol</i> (TRB Annual Meeting, TRBAM-27-05211).</p>
+  <h3>Acknowledgments</h3>
+  <p>The city-scale 3D presentation was inspired by <a href="http://geowind2plan.com/" target="_blank" rel="noopener">GeoWind2Plan</a> (Qin, Zhao, Lyu, Zhou, Yao, Liu, Anandkumar, Wang and Xiao, 2026). CorridorIQ uses its own models and reuses no GeoWind2Plan code or data.</p>
+  <p>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL). Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) and the U.S. National Weather Service. 3D: three.js (MIT).</p>
+  <p class="copy">© 2026 Rawda Ahmed, Southern Methodist University. Released under the MIT License.</p>
+  <button class="btn go" value="close">Close</button>
+</form></dialog>
 
 <script>/* AAM Corridor Lab - browser engine. Line-for-line twin of the Python package:
      corridor.py / geo.py      -> buildCorridor, rasterize, parseOSM
@@ -2361,6 +2378,7 @@ $("osmfile").onchange = async (e) => { const f = e.target.files[0]; if (!f) retu
   } catch (err) { toast(`Could not read that file: ${err.message}`); } };
 function updateArea() { $("areaname").textContent = S.city.name; $("areainfo").textContent = `${S.city.buildings.length.toLocaleString()} buildings · ${P.length} places`; }
 $("m-wind").onchange = (e) => { S.windView = ["all", "off", "cruise"].includes(e.target.value) ? e.target.value : +e.target.value; applyView(); };
+$("aboutBtn").onclick = () => $("about").showModal();
 $("m-view").onchange = (e) => { S.view = e.target.value; applyView(); };
 $("m-wtype").onclick = () => { S.windColor = !S.windColor; $("m-wtype").setAttribute("aria-pressed", S.windColor); if (S.screen === "plan" && S.plan && !S.plan.error) { const t = S.anim.t, pl = S.anim.playing; drawPlan(); S.anim.t = t; S.anim.playing = pl; } applyView(); };
 $("m-follow").onclick = () => { S.follow = !S.follow; $("m-follow").setAttribute("aria-pressed", S.follow); if (!S.follow && K) frameView(); };

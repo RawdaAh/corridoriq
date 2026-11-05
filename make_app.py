@@ -61,6 +61,9 @@ def main():
         assert tag in html, url
         html = html.replace(tag, "<script>" + Path(f).read_text().replace("</script", "<\\/script") + "</script>")
     Path(a.out).write_text(html)
+    if a.out == "demo/corridoriq.html":          # GitHub Pages serves docs/index.html
+        Path("docs").mkdir(exist_ok=True)
+        Path("docs/index.html").write_text(html)
     print(f"{a.out}: {len(html) / 1e6:.1f} MB · {len(data['city']['buildings'])} buildings · "
           f"{len(data['city']['places'])} places · {len(data['city']['trees'])} trees · {wx['source']}")
 

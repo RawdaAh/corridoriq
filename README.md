@@ -1,4 +1,73 @@
-# AAM Corridor Lab
+<div align="center">
+
+# CorridorIQ
+
+**Wind-aware planning for urban drone corridors: routes, capacity and dispatch, on real city maps and live weather.**
+
+[![Tests](https://github.com/USERNAME/corridoriq/actions/workflows/tests.yml/badge.svg)](https://github.com/USERNAME/corridoriq/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-open%20CorridorIQ-1747c9)](https://USERNAME.github.io/corridoriq/)
+
+[**Open the live demo**](https://USERNAME.github.io/corridoriq/) · [User guide (slides)](docs/CorridorIQ_guide.pptx) · [Framework figure](docs/figures/framework.pdf)
+
+<img src="docs/images/plan.jpg" alt="CorridorIQ planning a wind-aware drone flight over downtown Dallas" width="900">
+
+</div>
+
+## What it does
+
+CorridorIQ answers four questions that drone operators, airspace authorities and city planners ask before low-altitude corridors can open:
+
+| | Question | How |
+|---|---|---|
+| **Plan flights** | Which route, altitude and departure time use the least time and energy in today's wind? | Time–energy Pareto search over a 3D corridor laid around real buildings, with wind from a live forecast bent around the footprints |
+| **Corridor capacity** | How many flights per hour can a corridor approve, and how big must it be? | Shared-intent reservation registry: every request books conflict-free link-time slots or is denied |
+| **Dispatch** | When should each flight leave, and on which path, when requests have priorities? | Rolling-horizon priority optimization vs. first come, first served and a hindsight benchmark |
+| **Validation** | Does it reproduce the published research? | Re-runs the papers' experiments in the browser next to the published values |
+
+<table><tr>
+<td><img src="docs/images/network.jpg" alt="Full corridor network design with links by type" width="440"></td>
+<td><img src="docs/images/capacity.jpg" alt="Corridor capacity simulation with many operators" width="440"></td>
+</tr><tr>
+<td align="center">Corridor network as designed: lanes, layers, link types, links removed by buildings</td>
+<td align="center">One hour of multi-operator traffic on a shared corridor</td>
+</tr></table>
+
+## Try it
+
+- **In the browser:** open the [live demo](https://USERNAME.github.io/corridoriq/), or download [`demo/corridoriq.html`](demo/corridoriq.html) and double-click it. It is one self-contained file: no install, no server. **Live forecast** fetches the current wind; **Change area** loads any OpenStreetMap `.osm` export.
+- **From Python** (research code, experiments, figures):
+
+```bash
+git clone https://github.com/USERNAME/corridoriq.git
+cd corridoriq
+pip install -r requirements.txt
+pytest -q                          # 25 tests: engine, Python/JavaScript parity, paper reproduction
+python make_app.py                 # rebuild the app with a fresh 24-hour wind forecast
+python run_wind_routing.py         # Paper 1 experiments -> results/wind_routing
+python run_sire_experiment.py      # Paper 2 experiments -> results/sire
+```
+
+## Data and models
+
+| Input | Source | Freshness |
+|---|---|---|
+| Buildings, roads, parks, named places | [OpenStreetMap](https://www.openstreetmap.org/copyright) | snapshot; any area can be loaded |
+| Wind at 33, 262, 394 and 591 ft | [Open-Meteo](https://open-meteo.com/), with the [U.S. National Weather Service](https://www.weather.gov/documentation/services-web-api) as backup | hourly forecast, captured at build time and refreshable live |
+| Wind around buildings | fast building-aware surrogate (potential flow + wake), not CFD | computed on every plan |
+| Link time and energy | published wind-aware routing model (20.42 J/ft, 35 mph, tail/cross/head rule) | computed on every plan |
+
+## Repository layout
+
+```
+aamsim/            Python engine: corridor lattice, wind, energy, Pareto routing, SIRE registry, rolling horizon, OSM, weather
+demo/              Browser apps: corridoriq.html (product), lab.html (research lab), lab_engine.js (JavaScript twin of aamsim)
+docs/              GitHub Pages site (index.html), user-guide slides, figures, screenshots
+run_*.py           Paper experiments          make_*.py   App builders
+results/           Experiment outputs (CSV and figures)          tests/   Unit, parity and reproduction tests
+```
+
+## Research background
 
 Code and simulation for a research program on **shared low-altitude Advanced Air Mobility (AAM) corridors**:
 
@@ -17,6 +86,7 @@ All four run on **one shared core**: the same modular corridor lattice, wind fie
    American Airlines Center (2.46 km, 30–120 m). Every node and link that would hit a building (8 m clearance) is removed, a
    building-aware wind is computed around the real footprints, and missions are planned with the four planning winds and flown in
    the true wind, exactly as in GeoWind2Plan; many-operator SIRE traffic runs on the same city corridor.
+
 
 ## CorridorIQ — the product app (`demo/corridoriq.html`)
 
@@ -268,10 +338,38 @@ tail 5.50 / 0.054, head 16.29 / 0.477, phase-dependent 0.187 / 0.071 / 0.495 kWh
 * Rolling horizon: `rolling.py` implements the 14 Oct 2026 notebook (priority ILP). The earlier draft's learned afterstate critic and Lagrangian
   decomposition are not implemented here.
 
-## Citation
+## How to cite
 
-If you use this code, please cite the corresponding papers (Ahmed and Abdelghany, Southern Methodist University).
+If you use CorridorIQ, its code or its results, please cite the software and the related papers. GitHub's **Cite this repository** button (from [`CITATION.cff`](CITATION.cff)) gives APA and BibTeX.
 
-## License
+```bibtex
+@software{ahmed2026corridoriq,
+  author = {Ahmed, Rawda and Abdelghany, Khaled},
+  title  = {CorridorIQ: Wind-aware planning for urban drone corridors},
+  year   = {2026},
+  url    = {https://github.com/USERNAME/corridoriq}
+}
+@article{ahmed_highways_sky,
+  author = {Ahmed, Rawda and Abdelghany, Khaled},
+  title  = {Highways in the Sky: UAV Routing under Dynamic Wind Profiles in Low-Altitude Urban Airspace},
+  journal = {Transportation Research Record},
+  note   = {Under review}
+}
+@inproceedings{ahmed_shared_corridors,
+  author = {Ahmed, Rawda and Abdelghany, Khaled},
+  title  = {Shared Advanced Air Mobility Corridors: Configuration, Capacity, and Demand Management under a Reservation Protocol},
+  booktitle = {Transportation Research Board Annual Meeting},
+  note   = {TRBAM-27-05211}
+}
+```
 
-MIT
+## Acknowledgments and related work
+
+- The city-scale 3D presentation of buildings, wind and drone routes was inspired by **GeoWind2Plan**: S. Qin, Y. Zhao, F. Lyu, D. Zhou, J. Yao, X. Liu, A. Anandkumar, L. L. Wang and X. Xiao, *GeoWind2Plan: Mission-Time 3D Urban Wind Prediction for Energy-Efficient UAV Planning* (2026). [Project site](http://geowind2plan.com/) · [Code](https://github.com/DUAL-Xiao/GeoWind2Plan). CorridorIQ uses its own models (corridor lattice, wind surrogate, energy model, reservation registry, dispatch optimizer) and reuses no GeoWind2Plan code or data.
+- Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database License (ODbL).
+- Weather data from [Open-Meteo](https://open-meteo.com/) (CC BY 4.0) and the [U.S. National Weather Service](https://www.weather.gov/).
+- 3D rendering with [three.js](https://threejs.org/) (MIT), included in `demo/vendor`.
+
+## Copyright and license
+
+Copyright © 2026 Rawda Ahmed, Southern Methodist University. Released under the [MIT License](LICENSE).
