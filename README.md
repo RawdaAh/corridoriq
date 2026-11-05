@@ -4,11 +4,11 @@
 
 **Wind-aware planning for urban drone corridors: routes, capacity and dispatch, on real city maps and live weather.**
 
-[![Tests](https://github.com/USERNAME/corridoriq/actions/workflows/tests.yml/badge.svg)](https://github.com/USERNAME/corridoriq/actions/workflows/tests.yml)
+[![Tests](https://github.com/RawdaAh/corridoriq/actions/workflows/tests.yml/badge.svg)](https://github.com/RawdaAh/corridoriq/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Live demo](https://img.shields.io/badge/demo-open%20CorridorIQ-1747c9)](https://USERNAME.github.io/corridoriq/)
+[![Live demo](https://img.shields.io/badge/demo-open%20CorridorIQ-1747c9)](https://rawdaah.github.io/corridoriq/)
 
-[**Open the live demo**](https://USERNAME.github.io/corridoriq/) · [User guide (slides)](docs/CorridorIQ_guide.pptx) · [Framework figure](docs/figures/framework.pdf)
+[**Open the live demo**](https://rawdaah.github.io/corridoriq/) · [User guide (slides)](docs/CorridorIQ_guide.pptx) · [Framework figure](docs/figures/framework.pdf)
 
 <img src="docs/images/plan.jpg" alt="CorridorIQ planning a wind-aware drone flight over downtown Dallas" width="900">
 
@@ -35,11 +35,11 @@ CorridorIQ answers four questions that drone operators, airspace authorities and
 
 ## Try it
 
-- **In the browser:** open the [live demo](https://USERNAME.github.io/corridoriq/), or download [`demo/corridoriq.html`](demo/corridoriq.html) and double-click it. It is one self-contained file: no install, no server. **Live forecast** fetches the current wind; **Change area** loads any OpenStreetMap `.osm` export.
+- **In the browser:** open the [live demo](https://rawdaah.github.io/corridoriq/), or download [`demo/corridoriq.html`](demo/corridoriq.html) and double-click it. It is one self-contained file: no install, no server. **Live forecast** fetches the current wind; **Change area** loads any OpenStreetMap `.osm` export.
 - **From Python** (research code, experiments, figures):
 
 ```bash
-git clone https://github.com/USERNAME/corridoriq.git
+git clone https://github.com/RawdaAh/corridoriq.git
 cd corridoriq
 pip install -r requirements.txt
 pytest -q                          # 25 tests: engine, Python/JavaScript parity, paper reproduction
@@ -347,7 +347,7 @@ If you use CorridorIQ, its code or its results, please cite the software and the
   author = {Ahmed, Rawda and Abdelghany, Khaled},
   title  = {CorridorIQ: Wind-aware planning for urban drone corridors},
   year   = {2026},
-  url    = {https://github.com/USERNAME/corridoriq}
+  url    = {https://github.com/RawdaAh/corridoriq}
 }
 @article{ahmed_highways_sky,
   author = {Ahmed, Rawda and Abdelghany, Khaled},

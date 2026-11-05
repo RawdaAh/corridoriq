@@ -11,8 +11,8 @@ authors:
     affiliation: Southern Methodist University
 year: 2026
 license: MIT
-url: "https://USERNAME.github.io/corridoriq/"
-repository-code: "https://github.com/USERNAME/corridoriq"
+url: "https://rawdaah.github.io/corridoriq/"
+repository-code: "https://github.com/RawdaAh/corridoriq"
 keywords: [advanced air mobility, UAV routing, urban wind, airspace corridors, reservation, rolling horizon]
 references:
   - type: article
