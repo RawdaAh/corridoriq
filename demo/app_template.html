@@ -11,7 +11,7 @@
   --brand: #1747c9; --brand-soft: #1747c914; --corridor: #b5267f;
   --aware: #1a7bdc; --naive: #e8811a; --good: #1e8a4c; --bad: #d13b3b; --warn: #b7791f;
   --op1: #1a7bdc; --op2: #e8681a; --op3: #1baf7a; --op4: #c98500; --op5: #d55181; --op6: #6250d6; --op7: #2c9a2c; --op8: #e34948; --op9: #3f8fa8; --op10: #8a6d3b;
-  --w-lo: #9fd6a0; --w-mid: #2c9ea1; --w-hi: #2f3fb0;
+  --w-lo: #b8e0a2; --w-mid: #3aa6a0; --w-hi: #3b4fb8;
   --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -401,9 +401,9 @@ function label(text, x, y, z, h, ax = 1) {   // text sprite in corridor-local co
   sp.scale.set(h * w / c.height, h, 1); sp.position.set(x, y, z); sp.center.set(ax, 0.5); sp.renderOrder = 10; return sp;
 }
 function windSelect() {
-  const el = $("m-wind"); if (!el || !K) return; const Ls = windLayers(), cur = S.windView ?? "all";
-  el.innerHTML = `<option value="all">Wind: all layers</option><option value="off">Wind: hide</option>` + Ls.map((z, i) => `<option value="${i}">Wind at ${Math.round(z * FT)} ft</option>`).join("");
-  el.value = cur === "all" || cur === "off" || +cur < Ls.length ? String(cur) : "all";
+  const el = $("m-wind"); if (!el || !K) return; const Ls = windLayers(), cur = S.windView ?? "cruise";
+  el.innerHTML = `<option value="cruise">Wind: at cruise altitude</option><option value="all">Wind: all layers</option><option value="off">Wind: hide</option>` + Ls.map((z, i) => `<option value="${i}">Wind at ${Math.round(z * FT)} ft</option>`).join("");
+  el.value = cur === "all" || cur === "off" || cur === "cruise" || +cur < Ls.length ? String(cur) : "cruise";
 }
 const NET_TYPES = [["along", "Along the corridor", "#1a7bdc"], ["lateral", "Lane change", "#1baf7a"], ["vertical", "Climb / descent", "#6250d6"], ["face", "Diagonal", "#e8811a"], ["body", "3D diagonal", "#e87ba4"]];
 function applyView() {
@@ -493,34 +493,35 @@ function flyFrame(dt) {
     if (!REDUCED) d.rotors.forEach((ro, k) => ro.rotation.y += (k % 2 ? 1 : -1) * dt * 45); d.light.visible = Math.floor(performance.now() / 500) % 2 === 0; }
   if (S.follow && S.drones && S.drones[0]) { const p = S.drones[0].d.position; controls.target.lerp(p, 0.12); camera.position.lerp(p.clone().add(new THREE.Vector3(-160, 140, 170)), 0.06); }
 }
-const PART = { n: 4800, T: 10 };   // as dense as the original single-layer streaks: ~1,200 per layer, 2,400 for one layer
+// Wind streaks: same renderer as the first city demo (3,200 particles, 12-step trails, solid lines,
+// one altitude layer at a time, random start ages so the flow is continuous from the first frame).
+const PART = { n: 3200, T: 12 };
 function initParticles() { const g = group("particles"); PART.pos = new Float32Array(PART.n * PART.T * 2); PART.age = new Float32Array(PART.n); PART.life = new Float32Array(PART.n);
   PART.seg = new Float32Array(PART.n * (PART.T - 1) * 6); PART.col = new Float32Array(PART.n * (PART.T - 1) * 6); PART.geo = new THREE.BufferGeometry();
-  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3)); PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })); g.add(PART.mesh);
-  // particle heads as screen-size dots: visible on every GPU even where 1-pixel lines are drawn faint or culled
-  PART.head = new Float32Array(PART.n * 3); PART.hcol = new Float32Array(PART.n * 3); PART.hgeo = new THREE.BufferGeometry();
-  PART.hgeo.setAttribute("position", new THREE.BufferAttribute(PART.head, 3)); PART.hgeo.setAttribute("color", new THREE.BufferAttribute(PART.hcol, 3));
-  PART.dots = new THREE.Points(PART.hgeo, new THREE.PointsMaterial({ size: 3.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false })); g.add(PART.dots);
-  PART.mesh.frustumCulled = false; PART.dots.frustumCulled = false; }
+  PART.geo.setAttribute("position", new THREE.BufferAttribute(PART.seg, 3)); PART.geo.setAttribute("color", new THREE.BufferAttribute(PART.col, 3));
+  PART.mesh = new THREE.LineSegments(PART.geo, new THREE.LineBasicMaterial({ vertexColors: true })); PART.mesh.frustumCulled = false; g.add(PART.mesh); }
 const solidAt = (x, y, z) => { const gr = K.C.grid; const i = Math.floor((x - gr.x0) / gr.res), j = Math.floor((y - gr.y0) / gr.res); if (i < 0 || j < 0 || i >= gr.nx || j >= gr.ny) return true; return gr.H[i * gr.ny + j] >= z; };
-function spawn(i, z) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solidAt(x, y, z) && k < 20); for (let t = 0; t < PART.T; t++) { PART.pos[(i * PART.T + t) * 2] = x; PART.pos[(i * PART.T + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = 0; }
+function spawn(i, z, randomAge) { const W = S.plan.W; let x, y, k = 0; do { x = W.x0 + Math.random() * W.nx * W.res; y = W.y0 + Math.random() * W.ny * W.res; k++; } while (solidAt(x, y, z) && k < 20);
+  for (let t = 0; t < PART.T; t++) { PART.pos[(i * PART.T + t) * 2] = x; PART.pos[(i * PART.T + t) * 2 + 1] = y; } PART.life[i] = 3 + Math.random() * 5; PART.age[i] = randomAge ? Math.random() * PART.life[i] : 0; }
 const tmp = [0, 0];
 function windLayers() { return K ? K.C.z_levels.filter((z) => z > 0) : []; }   // corridor altitude layers (m)
+function windZ(i, Ls) { const v = S.windView ?? "cruise"; if (v === "all") return Ls[i % Ls.length];
+  if (v === "cruise") { const zc = (S.windAlt || 300) / FT; return Ls.reduce((a, b) => Math.abs(b - zc) < Math.abs(a - zc) ? b : a, Ls[Ls.length - 1]); }
+  return Ls[Math.min(+v, Ls.length - 1)]; }
 function particles(dt) {
-  const on = S.plan && S.plan.W && K && S.screen !== "disp" && S.screen !== "val" && S.windView !== "off"; PART.mesh.visible = !!on; PART.dots.visible = !!on; if (!on) return;
-  const Ls = windLayers(), view = S.windView ?? "all", key = Ls.join(",") + "|" + view;
-  const NA = view === "all" ? Math.min(PART.n, 1200 * Ls.length) : 2400;
-  if (PART.key !== key) { PART.zs = new Float32Array(PART.n); for (let i = 0; i < PART.n; i++) { PART.zs[i] = view === "all" ? Ls[i % Ls.length] : Ls[Math.min(+view, Ls.length - 1)]; PART.life[i] = 0; } PART.key = key; PART.geo.setDrawRange(0, NA * (PART.T - 1) * 2); PART.hgeo.setDrawRange(0, NA); }
-  const bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(4, ...S.plan.hw.speed_ms) * 1.15; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
-  for (let i = 0; i < NA; i++) { const z = PART.zs[i]; PART.age[i] += dt; if (PART.age[i] > PART.life[i] || !PART.life[i]) spawn(i, z); const b = i * PART.T * 2;
-    for (let k = PART.T - 1; k > 0; k--) { PART.pos[b + 2 * k] = PART.pos[b + 2 * k - 2]; PART.pos[b + 2 * k + 1] = PART.pos[b + 2 * k - 1]; }
-    G.sample(S.plan.W, PART.pos[b], PART.pos[b + 1], Math.max(z, 10), tmp); PART.pos[b] += tmp[0] * dt * 24; PART.pos[b + 1] += tmp[1] * dt * 24; if (solidAt(PART.pos[b], PART.pos[b + 1], z)) spawn(i, z);
+  const on = S.plan && S.plan.W && K && S.screen !== "disp" && S.screen !== "val" && S.windView !== "off"; PART.mesh.visible = !!on; if (!on) return;
+  const Ls = windLayers(), key = Ls.join(",") + "|" + (S.windView ?? "cruise") + "|" + S.windAlt + "|" + S.plan.ms;
+  if (PART.key !== key) { PART.zs = new Float32Array(PART.n); for (let i = 0; i < PART.n; i++) { PART.zs[i] = windZ(i, Ls); spawn(i, PART.zs[i], true); } PART.key = key; }
+  const T = PART.T, bg = col("--sky"), ramp = [col("--w-lo"), col("--w-mid"), col("--w-hi")], vmax = Math.max(1, ...S.plan.hw.speed_ms) * 1.6; $("wmax").textContent = `0–${fmt(vmax * MPH, 0)} mph`;
+  for (let i = 0; i < PART.n; i++) { const z = PART.zs[i]; PART.age[i] += dt; if (PART.age[i] > PART.life[i]) spawn(i, z, false); const b = i * T * 2;
+    for (let k = T - 1; k > 0; k--) { PART.pos[b + 2 * k] = PART.pos[b + 2 * k - 2]; PART.pos[b + 2 * k + 1] = PART.pos[b + 2 * k - 1]; }
+    G.sample(S.plan.W, PART.pos[b], PART.pos[b + 1], Math.max(z, 10), tmp); PART.pos[b] += tmp[0] * dt * 28; PART.pos[b + 1] += tmp[1] * dt * 28;
+    if (solidAt(PART.pos[b], PART.pos[b + 1], z) || Math.abs(tmp[0]) + Math.abs(tmp[1]) < 1e-3) spawn(i, z, false);
     const f = Math.min(1, Math.hypot(tmp[0], tmp[1]) / vmax), c = f < 0.5 ? ramp[0].clone().lerp(ramp[1], f * 2) : ramp[1].clone().lerp(ramp[2], (f - 0.5) * 2);
-    for (let k = 0; k < PART.T - 1; k++) { const s = (i * (PART.T - 1) + k) * 6, e0 = G.toEN(K.F, PART.pos[b + 2 * k], PART.pos[b + 2 * k + 1]), e1 = G.toEN(K.F, PART.pos[b + 2 * k + 2], PART.pos[b + 2 * k + 3]);
+    for (let k = 0; k < T - 1; k++) { const s = (i * (T - 1) + k) * 6, e0 = G.toEN(K.F, PART.pos[b + 2 * k], PART.pos[b + 2 * k + 1]), e1 = G.toEN(K.F, PART.pos[b + 2 * k + 2], PART.pos[b + 2 * k + 3]);
       PART.seg[s] = e0[0]; PART.seg[s + 1] = z; PART.seg[s + 2] = -e0[1]; PART.seg[s + 3] = e1[0]; PART.seg[s + 4] = z; PART.seg[s + 5] = -e1[1];
-      const cc = bg.clone().lerp(c, 0.25 + 0.75 * (1 - k / (PART.T - 1)) * Math.min(1, PART.age[i] * 2)); PART.col.set([cc.r, cc.g, cc.b, cc.r, cc.g, cc.b], s); }
-    const hs = i * 3, eh = G.toEN(K.F, PART.pos[b], PART.pos[b + 1]); PART.head[hs] = eh[0]; PART.head[hs + 1] = z; PART.head[hs + 2] = -eh[1]; PART.hcol[hs] = c.r; PART.hcol[hs + 1] = c.g; PART.hcol[hs + 2] = c.b; }
-  PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true; PART.hgeo.attributes.position.needsUpdate = true; PART.hgeo.attributes.color.needsUpdate = true;
+      const cc = bg.clone().lerp(c, 0.25 + 0.75 * Math.min(1, PART.age[i] * 2) * (1 - k / (T - 1))); PART.col.set([cc.r, cc.g, cc.b, cc.r, cc.g, cc.b], s); } }
+  PART.geo.attributes.position.needsUpdate = true; PART.geo.attributes.color.needsUpdate = true;
 }
 function frameView() { const C = K.C, a = G.toEN(K.F, 0, 0), b = G.toEN(K.F, C.L, 0), mid = V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0), L = Math.max(600, C.L), back = G.toEN(K.F, -0.35 * L, -0.75 * L);
   controls.target.copy(mid.clone().setY(30)); camera.position.copy(V(back[0], back[1], 0.62 * L + 220)); sunFor(mid, L); }
@@ -910,7 +911,7 @@ $("osmfile").onchange = async (e) => { const f = e.target.files[0]; if (!f) retu
     go("plan"); toast(`${c.buildings.length} buildings loaded. Search a place or click the map for From and To.`);
   } catch (err) { toast(`Could not read that file: ${err.message}`); } };
 function updateArea() { $("areaname").textContent = S.city.name; $("areainfo").textContent = `${S.city.buildings.length.toLocaleString()} buildings · ${P.length} places`; }
-$("m-wind").onchange = (e) => { S.windView = e.target.value === "all" || e.target.value === "off" ? e.target.value : +e.target.value; applyView(); };
+$("m-wind").onchange = (e) => { S.windView = ["all", "off", "cruise"].includes(e.target.value) ? e.target.value : +e.target.value; applyView(); };
 $("m-view").onchange = (e) => { S.view = e.target.value; applyView(); };
 $("m-wtype").onclick = () => { S.windColor = !S.windColor; $("m-wtype").setAttribute("aria-pressed", S.windColor); if (S.screen === "plan" && S.plan && !S.plan.error) { const t = S.anim.t, pl = S.anim.playing; drawPlan(); S.anim.t = t; S.anim.playing = pl; } applyView(); };
 $("m-follow").onclick = () => { S.follow = !S.follow; $("m-follow").setAttribute("aria-pressed", S.follow); if (!S.follow && K) frameView(); };
